@@ -160,7 +160,7 @@ class RecorderWindow(QMainWindow):
                 background: rgba(255, 255, 255, 0.1);
                 border-radius: 4px;
             }
-            QLabel {
+            QWidget#rootPanel QLabel {
                 background: transparent;
                 border: none;
                 color: #F8FAFC;
@@ -204,17 +204,27 @@ class RecorderWindow(QMainWindow):
             QLabel#statIcon { color: #9AA4B2; font-size: 14px; }
             QLabel#statTitle { color: #9AA4B2; font-size: 11px; }
             QLabel#statValue { color: #F8FAFC; font-size: 14px; font-weight: 600; }
-            QPushButton {
-                background: transparent;
-                border: none;
-                border-radius: 8px;
-                padding: 6px;
+            
+            QPushButton#pauseBtn, QPushButton#stopBtn, QPushButton#settingsBtn {
+                background: #1A1E27;
+                border: 1px solid #242A38;
+                border-radius: 10px;
+                padding: 12px 0px;
                 color: #9AA4B2;
-                font-size: 11px;
+                font-size: 12px;
+                font-weight: 600;
             }
-            QPushButton:hover { background: #1E232D; color: #F8FAFC; }
-            QPushButton#stopBtn { color: #FF4B4B; }
-            QPushButton#stopBtn:hover { background: #1E232D; color: #FF6666; }
+            QPushButton#pauseBtn:hover, QPushButton#settingsBtn:hover {
+                background: #242A38;
+                color: #F8FAFC;
+            }
+            QPushButton#stopBtn {
+                color: #FF4D4D;
+            }
+            QPushButton#stopBtn:hover {
+                background: #242A38;
+                color: #FF6666;
+            }
             """
         )
 
