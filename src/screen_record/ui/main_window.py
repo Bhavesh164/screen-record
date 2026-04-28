@@ -225,6 +225,13 @@ class RecorderWindow(QMainWindow):
         self.stop_button.setEnabled(active)
         self.pause_button.setEnabled(active)
 
+    def set_starting_state(self) -> None:
+        self.status_chip.setText("Starting")
+        self.recording_label.setText("Preparing capture")
+        self.record_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+
     def update_metrics(self, elapsed_ms: int, file_size_bytes: int, keystrokes: int) -> None:
         self.timer_label.setText(_format_ms(elapsed_ms))
         self.storage_card.set_value(_format_megabytes(file_size_bytes))

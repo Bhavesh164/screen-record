@@ -1,8 +1,8 @@
 from __future__ import annotations
-
+import sys
 from types import SimpleNamespace
 
-from screen_record.capture.keystrokes import build_segments, normalize_key
+from screen_record.capture.keystrokes import KeyEventCollector, build_segments, normalize_key
 from screen_record.models import KeyEvent
 
 
@@ -30,3 +30,12 @@ def test_groups_events_by_inactivity() -> None:
     assert [segment.text for segment in segments] == ["hi", "[Enter]"]
     assert segments[0].start_ms == 0
     assert segments[1].start_ms == 900
+
+def test_key_collector_disables_pynput_on_macos(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    collector = KeyEventCollector()
+
+    collector.start()
+
+    assert collector.supported() is False
+    assert collector.snapshot() == []

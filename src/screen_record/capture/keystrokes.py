@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import sys
 import threading
 from collections import deque
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any
-
-from pynput import keyboard
 
 from screen_record.models import KeyEvent, PauseSpan, TimelineSegment
 
@@ -98,7 +97,12 @@ class KeyEventCollector:
 
     def start(self) -> None:
         self._session_start = monotonic()
+        if sys.platform == "darwin":
+            self._platform_capture_supported = False
+            return
         try:
+            from pynput import keyboard
+
             self._listener = keyboard.Listener(on_press=self._on_press)
             self._listener.start()
         except Exception:

@@ -22,6 +22,7 @@ uv sync --group dev
 
 echo "==> Cleaning previous build artifacts..."
 rm -rf build/ dist/
+mkdir -p build/ScreenRecord
 
 echo "==> Building CaptoKey with PyInstaller..."
 SCREEN_RECORD_FFMPEG_BIN="$FFMPEG_BIN" uv run pyinstaller ScreenRecord.spec --clean --noconfirm
