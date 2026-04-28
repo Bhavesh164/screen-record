@@ -30,17 +30,19 @@ class StatCard(QFrame):
         self.value_label = QLabel(value)
         self.title_label.setObjectName("statTitle")
         self.value_label.setObjectName("statValue")
-        text_layout = QVBoxLayout()
-        text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(2)
-        text_layout.addWidget(self.title_label)
-        text_layout.addWidget(self.value_label)
+        
+        top_layout = QHBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(6)
+        top_layout.addWidget(icon_label)
+        top_layout.addWidget(self.title_label)
+        top_layout.addStretch()
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 9, 10, 9)
-        layout.setSpacing(8)
-        layout.addWidget(icon_label)
-        layout.addLayout(text_layout)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(4)
+        layout.addLayout(top_layout)
+        layout.addWidget(self.value_label)
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
@@ -94,7 +96,7 @@ class RecorderWindow(QMainWindow):
 
         stats = QGridLayout()
         stats.setSpacing(10)
-        self.storage_card = StatCard("Storage", "0 MB", "▤")
+        self.storage_card = StatCard("Storage", "0 MB", "⛁")
         self.key_card = StatCard("Keystrokes", "0", "⌨")
         stats.addWidget(self.storage_card, 0, 0)
         stats.addWidget(self.key_card, 0, 1)
@@ -107,11 +109,14 @@ class RecorderWindow(QMainWindow):
 
         controls = QHBoxLayout()
         controls.setSpacing(8)
-        self.pause_button = QPushButton("Ⅱ\nPause")
+        self.pause_button = QPushButton("⏸\nPause")
+        self.pause_button.setObjectName("pauseBtn")
         self.pause_button.clicked.connect(self._toggle_pause)
-        self.stop_button = QPushButton("■\nStop")
+        self.stop_button = QPushButton("⏹\nStop")
+        self.stop_button.setObjectName("stopBtn")
         self.stop_button.clicked.connect(self.stopRequested.emit)
-        self.settings_button = QPushButton("☰\nSettings")
+        self.settings_button = QPushButton("⚙\nSettings")
+        self.settings_button.setObjectName("settingsBtn")
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
@@ -124,73 +129,81 @@ class RecorderWindow(QMainWindow):
                 background: transparent;
             }
             QWidget#rootPanel {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #12161E, stop:1 #0B1017);
-                color: #F3F4F6;
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                border-radius: 18px;
+                background: #12151C;
+                color: #F8FAFC;
+                border: 1px solid #1E232D;
+                border-radius: 12px;
             }
             QLabel#statusChip {
-                background: #123F29;
+                background: #1A3B29;
                 color: #69E18A;
-                padding: 4px 9px;
-                border: 1px solid rgba(105, 225, 138, 0.16);
-                border-radius: 9px;
+                padding: 4px 10px;
+                border-radius: 10px;
                 font-size: 11px;
-                font-weight: 700;
+                font-weight: 600;
             }
-            QLabel#timer { color: #F8FAFC; font-size: 14px; font-weight: 700; }
+            QLabel#timer { color: #F8FAFC; font-size: 14px; font-weight: 600; }
             QLabel {
                 background: transparent;
                 border: none;
-                color: #F3F4F6;
+                color: #F8FAFC;
             }
             QPushButton#recordButton {
-                min-width: 74px;
-                max-width: 74px;
-                min-height: 74px;
-                max-height: 74px;
-                border-radius: 37px;
-                background: qradialgradient(cx:0.5, cy:0.5, radius:0.72, stop:0 #FF6255, stop:0.58 #FA392E, stop:1 #9B1916);
-                border: 8px solid #2B2F39;
+                min-width: 84px;
+                max-width: 84px;
+                min-height: 84px;
+                max-height: 84px;
+                border-radius: 42px;
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, 
+                    stop:0 #FF4B4B, stop:0.62 #FF4B4B, 
+                    stop:0.67 transparent, stop:0.82 transparent, 
+                    stop:0.87 #FF4B4B, stop:1 #FF4B4B);
+                border: none;
             }
-            QPushButton#recordButton:hover { border-color: #3A414E; }
-            QPushButton#recordButton:disabled { color: transparent; }
+            QPushButton#recordButton:hover { 
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, 
+                    stop:0 #FF6666, stop:0.62 #FF6666, 
+                    stop:0.67 transparent, stop:0.82 transparent, 
+                    stop:0.87 #FF4B4B, stop:1 #FF4B4B);
+            }
+            QPushButton#recordButton:disabled { opacity: 0.5; }
             QLabel#recordingLabel {
                 background: transparent;
                 border: none;
                 color: #F8FAFC;
                 font-size: 13px;
-                font-weight: 700;
+                font-weight: 600;
             }
             QLabel#scopeLabel {
                 background: transparent;
                 border: none;
-                color: #A9B2C2;
+                color: #9AA4B2;
                 font-size: 11px;
             }
             QFrame {
-                background: #171E28;
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                border-radius: 6px;
+                background: #171B24;
+                border: 1px solid #1E232D;
+                border-radius: 8px;
             }
             QFrame#divider {
-                background: rgba(255, 255, 255, 0.08);
+                background: #1E232D;
                 border: none;
                 border-radius: 0;
             }
-            QLabel#statIcon { color: #B0BAC8; font-size: 12px; }
-            QLabel#statTitle { color: #96A0B0; font-size: 10px; }
-            QLabel#statValue { color: #F5F7FA; font-size: 12px; font-weight: 700; }
+            QLabel#statIcon { color: #9AA4B2; font-size: 14px; }
+            QLabel#statTitle { color: #9AA4B2; font-size: 11px; }
+            QLabel#statValue { color: #F8FAFC; font-size: 14px; font-weight: 600; }
             QPushButton {
                 background: transparent;
                 border: none;
                 border-radius: 8px;
-                padding: 5px 4px;
-                color: #E5E7EB;
-                font-size: 10px;
+                padding: 6px;
+                color: #9AA4B2;
+                font-size: 11px;
             }
-            QPushButton:hover { background: rgba(255, 255, 255, 0.06); }
-            QPushButton:disabled { color: #6F7784; }
+            QPushButton:hover { background: #1E232D; color: #F8FAFC; }
+            QPushButton#stopBtn { color: #FF4B4B; }
+            QPushButton#stopBtn:hover { background: #1E232D; color: #FF6666; }
             """
         )
 
