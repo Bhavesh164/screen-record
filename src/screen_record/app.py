@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from screen_record.capture.ffmpeg import FFmpegVideoWriter
 from screen_record.capture.keystrokes import KeyEventCollector
@@ -314,13 +314,22 @@ class ScreenRecordApplication(QObject):
         self.selector = RegionSelector()
         self._selected_region: CaptureRegion | None = None
 
+        # System tray for notifications when the window is hidden
+        self._tray = QSystemTrayIcon(self)
+        icon_file = asset_path("captokey.png")
+        if icon_file.exists():
+            self._tray.setIcon(QIcon(str(icon_file)))
+        else:
+            self._tray.setIcon(app.windowIcon())
+        self._tray.show()
+
         self.window.startRequested.connect(self._start_recording)
-        self.window.stopRequested.connect(self.controller.stop)
+        self.window.stopRequested.connect(self._stop_recording)
         self.window.pauseToggled.connect(self.controller.toggle_pause)
         self.window.settingsRequested.connect(self._open_settings)
         self.window.renderAgainRequested.connect(self.controller.rerender)
         self.controller.statsUpdated.connect(self.window.update_metrics)
-        self.controller.stateChanged.connect(self.window.set_recording_state)
+        self.controller.stateChanged.connect(self._on_state_changed)
         self.controller.errorRaised.connect(self.window.show_error)
         self.controller.sessionSaved.connect(self._handle_saved_session)
         self.selector.regionSelected.connect(self._begin_recording_with_region)
@@ -341,15 +350,40 @@ class ScreenRecordApplication(QObject):
             return
         self._begin_recording_with_region(default_region_for_primary_screen())
 
-    def _begin_recording_with_region(self, region: CaptureRegion) -> None:
-        self.window.show()
+    def _stop_recording(self) -> None:
+        self.controller.stop()
+        # Restore the window immediately so the user sees the completion dialog
+        self.window.showNormal()
         self.window.raise_()
+
+    def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
         self.window.update_scope(f"{region.width}×{region.height}")
         try:
             self.controller.start(region)
         except Exception as exc:
+            self.window.showNormal()
             self.window.show_error(str(exc))
+            return
+
+        # Hide the window so it doesn't appear in the recording
+        self.window.hide()
+
+        # Show a system tray notification as recording feedback
+        if self._tray.supportsMessages():
+            self._tray.showMessage(
+                "CaptoKey",
+                "Recording started! Press S to stop.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000,
+            )
+
+    def _on_state_changed(self, active: bool, paused: bool) -> None:
+        self.window.set_recording_state(active, paused)
+        if not active:
+            # Recording stopped → show the window again
+            self.window.showNormal()
+            self.window.raise_()
 
     def _open_settings(self) -> None:
         updated = self.window.prompt_settings(self.settings)
@@ -361,6 +395,8 @@ class ScreenRecordApplication(QObject):
         self.window.update_scope(updated.capture_mode.replace("_", " ").title())
 
     def _handle_saved_session(self, session_dir: str) -> None:
+        self.window.showNormal()
+        self.window.raise_()
         self.window.update_metrics(0, 0, 0)
         self.window.update_scope(self.settings.capture_mode.replace("_", " ").title())
         self.window.show_completion(Path(session_dir))

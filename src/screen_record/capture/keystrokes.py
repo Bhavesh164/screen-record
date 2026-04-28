@@ -88,7 +88,7 @@ def build_segments(events: list[KeyEvent], inactivity_threshold_ms: int = 650) -
 class KeyEventCollector:
     _events: deque[KeyEvent] = field(default_factory=deque)
     _lock: threading.Lock = field(default_factory=threading.Lock)
-    _listener: keyboard.Listener | None = None
+    _listener: Any = None
     _session_start: float = 0.0
     _paused: bool = False
     _pause_spans: list[PauseSpan] = field(default_factory=list)
@@ -97,9 +97,6 @@ class KeyEventCollector:
 
     def start(self) -> None:
         self._session_start = monotonic()
-        if sys.platform == "darwin":
-            self._platform_capture_supported = False
-            return
         try:
             from pynput import keyboard
 
