@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# build.sh — Build ScreenRecord standalone executables for the current platform.
+# build.sh — Build CaptoKey standalone executables for the current platform.
 # Usage: ./build.sh
 #
-# On macOS  → produces dist/ScreenRecord.app and dist/ScreenRecord.dmg
-# On Linux  → produces dist/ScreenRecord/
-# On Windows (via Git Bash / WSL) → produces dist/ScreenRecord/
+# On macOS  → produces dist/CaptoKey.app and dist/CaptoKey.dmg
+# On Linux  → produces dist/CaptoKey/
+# On Windows (via Git Bash / WSL) → produces dist/CaptoKey/
 
 set -euo pipefail
 
@@ -23,12 +23,12 @@ uv sync --group dev
 echo "==> Cleaning previous build artifacts..."
 rm -rf build/ dist/
 
-echo "==> Building ScreenRecord with PyInstaller..."
+echo "==> Building CaptoKey with PyInstaller..."
 SCREEN_RECORD_FFMPEG_BIN="$FFMPEG_BIN" uv run pyinstaller ScreenRecord.spec --clean --noconfirm
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-    APP_PATH="dist/ScreenRecord.app"
-    DMG_PATH="dist/ScreenRecord.dmg"
+    APP_PATH="dist/CaptoKey.app"
+    DMG_PATH="dist/CaptoKey.dmg"
 
     if [[ ! -d "$APP_PATH" ]]; then
         echo "Expected app bundle at $APP_PATH but it was not created." >&2
@@ -38,17 +38,17 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     echo "==> Creating macOS disk image..."
     staging_dir="$(mktemp -d)"
     cp -R "$APP_PATH" "$staging_dir/"
-    xattr -cr "$staging_dir/ScreenRecord.app"
-    codesign --force --deep --sign - "$staging_dir/ScreenRecord.app"
+    xattr -cr "$staging_dir/CaptoKey.app"
+    codesign --force --deep --sign - "$staging_dir/CaptoKey.app"
     ln -s /Applications "$staging_dir/Applications"
     hdiutil create \
-        -volname "Screen Record" \
+        -volname "CaptoKey" \
         -srcfolder "$staging_dir" \
         -ov \
         -format UDZO \
         "$DMG_PATH" >/dev/null
     rm -rf "$staging_dir"
-    rm -rf dist/ScreenRecord
+    rm -rf dist/CaptoKey
     rm -f dist/.DS_Store
 fi
 
@@ -60,15 +60,15 @@ echo ""
 
 case "$(uname -s)" in
     Darwin)
-        echo "    macOS app bundle: dist/ScreenRecord.app"
-        echo "    Disk image:       dist/ScreenRecord.dmg"
+        echo "    macOS app bundle: dist/CaptoKey.app"
+        echo "    Disk image:       dist/CaptoKey.dmg"
         ;;
     Linux)
-        echo "    Directory build:  dist/ScreenRecord/"
-        echo "    Run with:         ./dist/ScreenRecord/ScreenRecord"
+        echo "    Directory build:  dist/CaptoKey/"
+        echo "    Run with:         ./dist/CaptoKey/CaptoKey"
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        echo "    Directory build:  dist\\ScreenRecord\\"
-        echo "    Run with:         dist\\ScreenRecord\\ScreenRecord.exe"
+        echo "    Directory build:  dist\\CaptoKey\\"
+        echo "    Run with:         dist\\CaptoKey\\CaptoKey.exe"
         ;;
 esac

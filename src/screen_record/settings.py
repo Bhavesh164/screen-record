@@ -11,7 +11,7 @@ from screen_record.runtime import bundled_ffmpeg_path
 
 
 ORG_NAME = "Kilo"
-APP_NAME = "ScreenRecord"
+APP_NAME = "CaptoKey"
 
 
 def default_downloads_dir() -> Path:

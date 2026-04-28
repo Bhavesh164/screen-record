@@ -25,6 +25,7 @@ MANIFEST
 # PyInstaller Specific
 *.manifest
 *.spec
+!ScreenRecord.spec
 
 # Installer logs
 pip-log.txt

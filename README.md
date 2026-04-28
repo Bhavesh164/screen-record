@@ -1,4 +1,4 @@
-# Screen Record
+# CaptoKey
 
 Desktop screen recorder built with PySide6, `mss`, `pynput`, Pillow, and `ffmpeg`.
 

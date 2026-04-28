@@ -55,7 +55,7 @@ class RecorderWindow(QMainWindow):
 
     def __init__(self, settings: AppSettings) -> None:
         super().__init__()
-        self.setWindowTitle("Screen Record")
+        self.setWindowTitle("CaptoKey")
         self.setFixedSize(260, 324)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self._latest_session_dir: Path | None = None
@@ -258,7 +258,7 @@ class RecorderWindow(QMainWindow):
             self.renderAgainRequested.emit(str(session_dir))
 
     def show_error(self, message: str) -> None:
-        QMessageBox.critical(self, "Screen Record", message)
+        QMessageBox.critical(self, "CaptoKey", message)
 
     def _toggle_start_stop(self) -> None:
         self.startRequested.emit()

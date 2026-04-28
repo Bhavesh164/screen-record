@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from screen_record.capture.ffmpeg import FFmpegVideoWriter
@@ -18,6 +19,7 @@ from screen_record.capture.session import SessionMetadata, create_session_paths
 from screen_record.models import AppSettings, CaptureRegion
 from screen_record.render.ffmpeg_renderer import render_final_video
 from screen_record.render.timeline import build_timeline_payload, coerce_segments, load_timeline, write_timeline
+from screen_record.runtime import asset_path
 from screen_record.settings import SettingsStore, resolve_ffmpeg_path
 from screen_record.ui.main_window import RecorderWindow
 from screen_record.ui.region_selector import RegionSelector
@@ -366,7 +368,10 @@ class ScreenRecordApplication(QObject):
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("Screen Record")
+    app.setApplicationName("CaptoKey")
     app.setOrganizationName("Kilo")
+    icon_file = asset_path("captokey.png")
+    if icon_file.exists():
+        app.setWindowIcon(QIcon(str(icon_file)))
     controller = ScreenRecordApplication(app)
     sys.exit(app.exec())

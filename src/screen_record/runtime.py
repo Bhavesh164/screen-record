@@ -9,6 +9,12 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def asset_path(name: str) -> Path:
+    if is_frozen():
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "assets" / name
+    return Path(__file__).resolve().parents[2] / "assets" / name
+
+
 def bundled_ffmpeg_path(
     *,
     executable_path: str | Path | None = None,
