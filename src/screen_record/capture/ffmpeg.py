@@ -18,6 +18,8 @@ class FFmpegVideoWriter:
         command = [
             self.ffmpeg_path,
             "-y",
+            "-loglevel",
+            "error",
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -54,13 +56,18 @@ class FFmpegVideoWriter:
     def stop(self) -> None:
         if not self._process:
             return
-        stderr = b""
+        process = self._process
         if self._process.stdin:
             self._process.stdin.close()
-        if self._process.stderr:
-            stderr = self._process.stderr.read()
-            self._process.stderr.close()
-        return_code = self._process.wait()
+            self._process.stdin = None
+        try:
+            _, stderr = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            _, stderr = process.communicate()
+            self._process = None
+            raise RuntimeError("ffmpeg did not stop within 10 seconds")
         self._process = None
+        return_code = process.returncode
         if return_code != 0:
             raise RuntimeError(stderr.decode("utf-8", errors="replace"))

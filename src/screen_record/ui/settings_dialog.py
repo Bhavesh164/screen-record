@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -25,10 +26,11 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(460, 320)
+        self.setMinimumSize(500, 390)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
         self.save_dir_edit = QLineEdit(settings.save_dir)
+        self.save_dir_edit.setMinimumWidth(220)
         browse_button = QPushButton("Browse")
         browse_button.clicked.connect(self._browse_directory)
 
@@ -49,10 +51,17 @@ class SettingsDialog(QDialog):
         self.ffmpeg_edit = QLineEdit(settings.ffmpeg_path)
 
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(14)
         form.addRow("Save location", self._panel(location_row))
         form.addRow("Capture mode", self.capture_mode_combo)
         form.addRow("FPS", self.fps_spin)
         form.addRow("FFmpeg path", self.ffmpeg_edit)
+
+        section = QFrame()
+        section.setObjectName("settingsSection")
+        section.setLayout(form)
 
         save_button = QPushButton("Save")
         cancel_button = QPushButton("Cancel")
@@ -65,13 +74,15 @@ class SettingsDialog(QDialog):
         buttons.addWidget(save_button)
 
         root = QVBoxLayout(self)
-        title = QLabel("Save Location")
+        root.setContentsMargins(22, 20, 22, 18)
+        root.setSpacing(12)
+        title = QLabel("Settings")
         title.setObjectName("sectionTitle")
         root.addWidget(title)
-        subtitle = QLabel("Choose where recorded videos will be saved.")
+        subtitle = QLabel("Choose where videos are saved and how capture runs.")
         subtitle.setObjectName("sectionSubtitle")
         root.addWidget(subtitle)
-        root.addLayout(form)
+        root.addWidget(section)
         root.addStretch(1)
         root.addLayout(buttons)
 
@@ -81,26 +92,37 @@ class SettingsDialog(QDialog):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0B0F16, stop:1 #111827);
                 color: #F5F7FA;
                 border: 1px solid #242B38;
-                border-radius: 16px;
             }
-            QLabel#sectionTitle { font-size: 16px; font-weight: 700; color: #D7DDF0; }
-            QLabel#sectionSubtitle { color: #8B95A7; margin-bottom: 12px; }
+            QLabel#sectionTitle { font-size: 18px; font-weight: 700; color: #F8FAFC; }
+            QLabel#sectionSubtitle { color: #9AA4B2; margin-bottom: 4px; }
+            QFrame#settingsSection {
+                background: #141B27;
+                border: 1px solid #242D3B;
+                border-radius: 8px;
+                padding: 16px;
+            }
+            QFrame#settingsSection QLabel {
+                color: #DDE3EE;
+                background: transparent;
+                border: none;
+            }
             QLineEdit, QComboBox, QSpinBox {
-                background: #151B26;
+                background: #0E141D;
                 border: 1px solid #2A3242;
-                border-radius: 10px;
-                padding: 10px;
+                border-radius: 6px;
+                padding: 9px;
                 color: #F5F7FA;
-                min-height: 20px;
+                min-height: 18px;
             }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #4D8DFF; }
             QPushButton {
-                background: #161D28;
+                background: #1A2230;
                 border: 1px solid #2A3242;
-                border-radius: 10px;
-                padding: 10px 14px;
+                border-radius: 6px;
+                padding: 9px 14px;
                 color: #F5F7FA;
             }
-            QPushButton:hover { border-color: #FF5B4A; }
+            QPushButton:hover { border-color: #4D8DFF; background: #202A3B; }
             """
         )
 
@@ -121,5 +143,7 @@ class SettingsDialog(QDialog):
     @staticmethod
     def _panel(layout: QHBoxLayout) -> QWidget:
         panel = QWidget()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         panel.setLayout(layout)
         return panel

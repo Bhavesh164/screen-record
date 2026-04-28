@@ -70,6 +70,9 @@ class RecorderController(QObject):
         self._started_at: datetime | None = None
         self._snapshot = RecorderSnapshot()
         self._snapshot_lock = threading.Lock()
+        self._stop_lock = threading.Lock()
+        self._stopping = False
+        self._failed = False
         self._dropped_frames = 0
         self._active_region: CaptureRegion | None = None
 
@@ -77,24 +80,31 @@ class RecorderController(QObject):
         if self._snapshot.active:
             return
 
-        ffmpeg_path = resolve_ffmpeg_path(self.settings.ffmpeg_path)
-        self._session_paths = create_session_paths(self.settings.resolved_save_dir())
-        self._active_region = region
-        self._stop_event.clear()
-        self._frame_queue = queue.Queue(maxsize=3)
-        self._collector = KeyEventCollector()
-        self._collector.start()
-        self._clock = SessionClock()
-        self._started_at = datetime.now()
-        self._dropped_frames = 0
-        self._writer = FFmpegVideoWriter(
-            ffmpeg_path=ffmpeg_path,
-            output_path=self._session_paths.source_video,
-            width=region.width,
-            height=region.height,
-            fps=self.settings.target_fps,
-        )
-        self._writer.start()
+        try:
+            ffmpeg_path = resolve_ffmpeg_path(self.settings.ffmpeg_path)
+            self.settings.resolved_save_dir().mkdir(parents=True, exist_ok=True)
+            self._session_paths = create_session_paths(self.settings.resolved_save_dir())
+            self._active_region = region
+            self._stop_event.clear()
+            self._frame_queue = queue.Queue(maxsize=3)
+            self._collector = KeyEventCollector()
+            self._collector.start()
+            self._clock = SessionClock()
+            self._started_at = datetime.now()
+            self._dropped_frames = 0
+            self._failed = False
+            self._stopping = False
+            self._writer = FFmpegVideoWriter(
+                ffmpeg_path=ffmpeg_path,
+                output_path=self._session_paths.source_video,
+                width=region.width,
+                height=region.height,
+                fps=self.settings.target_fps,
+            )
+            self._writer.start()
+        except Exception:
+            self._cleanup_after_failed_start()
+            raise
 
         with self._snapshot_lock:
             self._snapshot = RecorderSnapshot(active=True, paused=False)
@@ -118,29 +128,36 @@ class RecorderController(QObject):
     def stop(self) -> None:
         if not self._snapshot.active:
             return
-        threading.Thread(target=self._stop_worker, daemon=True).start()
+        self._request_stop()
 
     def rerender(self, session_dir: str) -> None:
         threading.Thread(target=self._rerender_worker, args=(session_dir,), daemon=True).start()
 
     def _stop_worker(self) -> None:
         self._stop_event.set()
-        if self._capture_thread:
+        current = threading.current_thread()
+        if self._capture_thread and self._capture_thread is not current:
             self._capture_thread.join(timeout=5)
-        if self._writer_thread:
+        if self._writer_thread and self._writer_thread is not current:
             self._writer_thread.join(timeout=5)
         self._collector.stop()
-        if self._writer:
-            self._writer.stop()
 
         try:
-            self._finalize_session()
+            if self._writer:
+                self._writer.stop()
+            if not self._failed:
+                self._finalize_session()
         except Exception as exc:
             self.errorRaised.emit(str(exc))
         finally:
             with self._snapshot_lock:
                 self._snapshot.active = False
                 self._snapshot.paused = False
+            self._capture_thread = None
+            self._writer_thread = None
+            self._writer = None
+            self._clock = None
+            self._stopping = False
             self.stateChanged.emit(False, False)
 
     def _rerender_worker(self, session_dir: str) -> None:
@@ -171,40 +188,43 @@ class RecorderController(QObject):
         self.statsUpdated.emit(snapshot.elapsed_ms, snapshot.file_size_bytes, snapshot.keystrokes)
 
     def _capture_loop(self, region: CaptureRegion) -> None:
-        provider = make_capture_provider(region)
-        frame_interval = 1 / max(1, self.settings.target_fps)
-        next_tick = time.monotonic()
+        try:
+            provider = make_capture_provider(region)
+            frame_interval = 1 / max(1, self.settings.target_fps)
+            next_tick = time.monotonic()
 
-        while not self._stop_event.is_set():
-            if self._snapshot.paused:
-                time.sleep(0.05)
-                continue
+            while not self._stop_event.is_set():
+                if self._snapshot.paused:
+                    time.sleep(0.05)
+                    continue
 
-            now = time.monotonic()
-            if now < next_tick:
-                time.sleep(next_tick - now)
-                continue
+                now = time.monotonic()
+                if now < next_tick:
+                    time.sleep(next_tick - now)
+                    continue
 
-            frame = provider.grab()
-            try:
-                self._frame_queue.put_nowait(frame)
-            except queue.Full:
+                frame = provider.grab()
                 try:
-                    self._frame_queue.get_nowait()
-                except queue.Empty:
-                    pass
-                self._frame_queue.put_nowait(frame)
-                self._dropped_frames += 1
+                    self._frame_queue.put_nowait(frame)
+                except queue.Full:
+                    try:
+                        self._frame_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    self._frame_queue.put_nowait(frame)
+                    self._dropped_frames += 1
 
-            elapsed_ms = self._clock.elapsed_ms() if self._clock else 0
-            file_size = self._session_paths.source_video.stat().st_size if self._session_paths and self._session_paths.source_video.exists() else 0
-            with self._snapshot_lock:
-                self._snapshot.elapsed_ms = elapsed_ms
-                self._snapshot.file_size_bytes = file_size
-                self._snapshot.keystrokes = len(self._collector.snapshot())
-            next_tick += frame_interval
-            if next_tick < now - frame_interval:
-                next_tick = now + frame_interval
+                elapsed_ms = self._clock.elapsed_ms() if self._clock else 0
+                file_size = self._session_paths.source_video.stat().st_size if self._session_paths and self._session_paths.source_video.exists() else 0
+                with self._snapshot_lock:
+                    self._snapshot.elapsed_ms = elapsed_ms
+                    self._snapshot.file_size_bytes = file_size
+                    self._snapshot.keystrokes = len(self._collector.snapshot())
+                next_tick += frame_interval
+                if next_tick < now - frame_interval:
+                    next_tick = now + frame_interval
+        except Exception as exc:
+            self._fail_recording(str(exc))
 
     def _writer_loop(self) -> None:
         while not self._stop_event.is_set() or not self._frame_queue.empty():
@@ -216,9 +236,34 @@ class RecorderController(QObject):
                 if self._writer:
                     self._writer.write_frame(frame.bytes_bgra)
             except Exception as exc:
-                self.errorRaised.emit(str(exc))
-                self._stop_event.set()
+                self._fail_recording(str(exc))
                 return
+
+    def _request_stop(self) -> None:
+        with self._stop_lock:
+            if self._stopping:
+                return
+            self._stopping = True
+        threading.Thread(target=self._stop_worker, daemon=True).start()
+
+    def _fail_recording(self, message: str) -> None:
+        self._failed = True
+        self.errorRaised.emit(message)
+        self._stop_event.set()
+        self._request_stop()
+
+    def _cleanup_after_failed_start(self) -> None:
+        self._stop_event.set()
+        self._collector.stop()
+        if self._writer:
+            try:
+                self._writer.stop()
+            except Exception:
+                pass
+        self._writer = None
+        self._clock = None
+        with self._snapshot_lock:
+            self._snapshot = RecorderSnapshot()
 
     def _finalize_session(self) -> None:
         if not self._session_paths or not self._clock or not self._started_at or not self._active_region:

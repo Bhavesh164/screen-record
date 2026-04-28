@@ -22,16 +22,25 @@ from screen_record.ui.settings_dialog import SettingsDialog
 
 
 class StatCard(QFrame):
-    def __init__(self, title: str, value: str) -> None:
+    def __init__(self, title: str, value: str, icon: str) -> None:
         super().__init__()
+        icon_label = QLabel(icon)
+        icon_label.setObjectName("statIcon")
         self.title_label = QLabel(title)
         self.value_label = QLabel(value)
         self.title_label.setObjectName("statTitle")
         self.value_label.setObjectName("statValue")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.value_label)
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+        text_layout.addWidget(self.title_label)
+        text_layout.addWidget(self.value_label)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 9, 10, 9)
+        layout.setSpacing(8)
+        layout.addWidget(icon_label)
+        layout.addLayout(text_layout)
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
@@ -47,15 +56,16 @@ class RecorderWindow(QMainWindow):
     def __init__(self, settings: AppSettings) -> None:
         super().__init__()
         self.setWindowTitle("Screen Record")
-        self.setFixedSize(240, 340)
+        self.setFixedSize(260, 324)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self._latest_session_dir: Path | None = None
         self._paused = False
 
         root = QWidget()
+        root.setObjectName("rootPanel")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(18, 14, 18, 16)
         layout.setSpacing(14)
 
         header = QHBoxLayout()
@@ -69,8 +79,8 @@ class RecorderWindow(QMainWindow):
         layout.addLayout(header)
 
         record_shell = QVBoxLayout()
-        record_shell.setSpacing(6)
-        self.record_button = QPushButton("●")
+        record_shell.setSpacing(7)
+        self.record_button = QPushButton("")
         self.record_button.setObjectName("recordButton")
         self.record_button.clicked.connect(self._toggle_start_stop)
         self.recording_label = QLabel("Ready to record")
@@ -84,18 +94,24 @@ class RecorderWindow(QMainWindow):
 
         stats = QGridLayout()
         stats.setSpacing(10)
-        self.storage_card = StatCard("Storage", "0 MB")
-        self.key_card = StatCard("Keystrokes", "0")
+        self.storage_card = StatCard("Storage", "0 MB", "▤")
+        self.key_card = StatCard("Keystrokes", "0", "⌨")
         stats.addWidget(self.storage_card, 0, 0)
         stats.addWidget(self.key_card, 0, 1)
         layout.addLayout(stats)
 
+        divider = QFrame()
+        divider.setObjectName("divider")
+        divider.setFixedHeight(1)
+        layout.addWidget(divider)
+
         controls = QHBoxLayout()
-        self.pause_button = QPushButton("Pause")
+        controls.setSpacing(8)
+        self.pause_button = QPushButton("Ⅱ\nPause")
         self.pause_button.clicked.connect(self._toggle_pause)
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton("■\nStop")
         self.stop_button.clicked.connect(self.stopRequested.emit)
-        self.settings_button = QPushButton("Settings")
+        self.settings_button = QPushButton("☰\nSettings")
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
@@ -107,49 +123,74 @@ class RecorderWindow(QMainWindow):
             QMainWindow {
                 background: transparent;
             }
-            QWidget {
+            QWidget#rootPanel {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #12161E, stop:1 #0B1017);
                 color: #F3F4F6;
-                border-radius: 22px;
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                border-radius: 18px;
             }
             QLabel#statusChip {
-                background: rgba(40, 180, 99, 0.15);
-                color: #57D27C;
-                padding: 6px 10px;
-                border-radius: 10px;
+                background: #123F29;
+                color: #69E18A;
+                padding: 4px 9px;
+                border: 1px solid rgba(105, 225, 138, 0.16);
+                border-radius: 9px;
                 font-size: 11px;
                 font-weight: 700;
             }
-            QLabel#timer { font-size: 17px; font-weight: 700; }
+            QLabel#timer { color: #F8FAFC; font-size: 14px; font-weight: 700; }
+            QLabel {
+                background: transparent;
+                border: none;
+                color: #F3F4F6;
+            }
             QPushButton#recordButton {
-                min-width: 82px;
-                max-width: 82px;
-                min-height: 82px;
-                max-height: 82px;
-                border-radius: 41px;
-                background: qradialgradient(cx:0.5, cy:0.5, radius:0.8, stop:0 #FF6B5D, stop:0.6 #FF4D3D, stop:1 #B6241A);
-                border: 6px solid rgba(255, 125, 109, 0.35);
-                color: white;
-                font-size: 38px;
-                font-weight: 800;
+                min-width: 74px;
+                max-width: 74px;
+                min-height: 74px;
+                max-height: 74px;
+                border-radius: 37px;
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.72, stop:0 #FF6255, stop:0.58 #FA392E, stop:1 #9B1916);
+                border: 8px solid #2B2F39;
             }
-            QLabel#recordingLabel { font-size: 15px; font-weight: 700; }
-            QLabel#scopeLabel { color: #9AA4B2; font-size: 12px; }
+            QPushButton#recordButton:hover { border-color: #3A414E; }
+            QPushButton#recordButton:disabled { color: transparent; }
+            QLabel#recordingLabel {
+                background: transparent;
+                border: none;
+                color: #F8FAFC;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLabel#scopeLabel {
+                background: transparent;
+                border: none;
+                color: #A9B2C2;
+                font-size: 11px;
+            }
             QFrame {
-                background: rgba(255, 255, 255, 0.04);
+                background: #171E28;
                 border: 1px solid rgba(255, 255, 255, 0.06);
-                border-radius: 14px;
+                border-radius: 6px;
             }
-            QLabel#statTitle { color: #8C96A6; font-size: 11px; }
-            QLabel#statValue { color: #F5F7FA; font-size: 18px; font-weight: 700; }
+            QFrame#divider {
+                background: rgba(255, 255, 255, 0.08);
+                border: none;
+                border-radius: 0;
+            }
+            QLabel#statIcon { color: #B0BAC8; font-size: 12px; }
+            QLabel#statTitle { color: #96A0B0; font-size: 10px; }
+            QLabel#statValue { color: #F5F7FA; font-size: 12px; font-weight: 700; }
             QPushButton {
                 background: transparent;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 12px;
-                padding: 10px;
+                border: none;
+                border-radius: 8px;
+                padding: 5px 4px;
                 color: #E5E7EB;
+                font-size: 10px;
             }
-            QPushButton:hover { border-color: #FF5B4A; }
+            QPushButton:hover { background: rgba(255, 255, 255, 0.06); }
+            QPushButton:disabled { color: #6F7784; }
             """
         )
 
@@ -179,7 +220,7 @@ class RecorderWindow(QMainWindow):
         else:
             self.status_chip.setText("Ready")
             self.recording_label.setText("Ready to record")
-        self.pause_button.setText("Resume" if paused else "Pause")
+        self.pause_button.setText("▶\nResume" if paused else "Ⅱ\nPause")
         self.record_button.setEnabled(not active)
         self.stop_button.setEnabled(active)
         self.pause_button.setEnabled(active)
@@ -234,4 +275,7 @@ def _format_ms(value: int) -> str:
 
 
 def _format_megabytes(value: int) -> str:
-    return f"{value / (1024 * 1024):.1f} MB"
+    megabytes = value / (1024 * 1024)
+    if megabytes >= 10 or megabytes.is_integer():
+        return f"{megabytes:.0f} MB"
+    return f"{megabytes:.1f} MB"
