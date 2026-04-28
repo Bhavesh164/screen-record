@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Any
+from dataclasses import dataclass, field
 
 import mss
 from PySide6.QtGui import QGuiApplication
@@ -24,6 +25,7 @@ class ScreenCaptureProvider(Protocol):
 @dataclass(slots=True)
 class MSSScreenCaptureProvider:
     region: CaptureRegion
+    _sct: Any = field(init=False)
 
     def __post_init__(self) -> None:
         self._sct = mss.mss()

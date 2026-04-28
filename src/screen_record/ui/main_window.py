@@ -58,7 +58,7 @@ class RecorderWindow(QMainWindow):
     def __init__(self, settings: AppSettings) -> None:
         super().__init__()
         self.setWindowTitle("CaptoKey")
-        self.setFixedSize(260, 324)
+        self.setFixedSize(280, 380)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self._latest_session_dir: Path | None = None
         self._paused = False
@@ -75,9 +75,14 @@ class RecorderWindow(QMainWindow):
         self.status_chip.setObjectName("statusChip")
         self.timer_label = QLabel("00:00:00")
         self.timer_label.setObjectName("timer")
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("closeAppBtn")
+        close_btn.setFixedSize(24, 24)
+        close_btn.clicked.connect(self.close)
         header.addWidget(self.status_chip)
         header.addStretch(1)
         header.addWidget(self.timer_label)
+        header.addWidget(close_btn)
         layout.addLayout(header)
 
         record_shell = QVBoxLayout()
@@ -142,7 +147,19 @@ class RecorderWindow(QMainWindow):
                 font-size: 11px;
                 font-weight: 600;
             }
-            QLabel#timer { color: #F8FAFC; font-size: 14px; font-weight: 600; }
+            QLabel#timer { color: #F8FAFC; font-size: 14px; font-weight: 600; margin-right: 8px; }
+            QPushButton#closeAppBtn {
+                background: transparent;
+                border: none;
+                color: #9AA4B2;
+                font-size: 14px;
+                padding: 0;
+            }
+            QPushButton#closeAppBtn:hover {
+                color: #F8FAFC;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+            }
             QLabel {
                 background: transparent;
                 border: none;
@@ -154,17 +171,11 @@ class RecorderWindow(QMainWindow):
                 min-height: 84px;
                 max-height: 84px;
                 border-radius: 42px;
-                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, 
-                    stop:0 #FF4B4B, stop:0.62 #FF4B4B, 
-                    stop:0.67 transparent, stop:0.82 transparent, 
-                    stop:0.87 #FF4B4B, stop:1 #FF4B4B);
-                border: none;
+                background: #FF4D4D;
+                border: 6px solid #1E232D;
             }
             QPushButton#recordButton:hover { 
-                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, 
-                    stop:0 #FF6666, stop:0.62 #FF6666, 
-                    stop:0.67 transparent, stop:0.82 transparent, 
-                    stop:0.87 #FF4B4B, stop:1 #FF4B4B);
+                background: #FF6666;
             }
             QPushButton#recordButton:disabled { opacity: 0.5; }
             QLabel#recordingLabel {

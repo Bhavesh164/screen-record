@@ -24,10 +24,11 @@ from screen_record.models import AppSettings
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("settingsDialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(460, 480)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setMinimumSize(480, 480)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self._drag_start = None
 
@@ -50,6 +51,7 @@ class SettingsDialog(QDialog):
 
         section_layout = QVBoxLayout()
         section_layout.setSpacing(16)
+        section_layout.setContentsMargins(16, 16, 16, 16)
 
         def make_field(title_text: str, desc_text: str, widget: QWidget) -> QVBoxLayout:
             vbox = QVBoxLayout()
@@ -97,7 +99,7 @@ class SettingsDialog(QDialog):
         buttons.addWidget(save_button)
 
         title_layout = QHBoxLayout()
-        title_layout.setContentsMargins(0, 0, 0, 10)
+        title_layout.setContentsMargins(0, 0, 0, 8)
         title = QLabel("Settings")
         title.setObjectName("dialogTitle")
         close_btn = QPushButton("✕")
@@ -118,21 +120,26 @@ class SettingsDialog(QDialog):
 
         self.setStyleSheet(
             """
-            QDialog {
+            QDialog#settingsDialog {
                 background: #12151C;
                 border: 1px solid #1E232D;
                 border-radius: 10px;
             }
-            QLabel#dialogTitle {
+            QLabel {
+                background: transparent;
+                border: none;
                 color: #F8FAFC;
-                font-size: 14px;
+            }
+            QLabel#dialogTitle {
+                font-size: 16px;
                 font-weight: 600;
             }
             QPushButton#closeBtn {
                 background: transparent;
                 border: none;
                 color: #9AA4B2;
-                font-size: 14px;
+                font-size: 16px;
+                padding: 0;
             }
             QPushButton#closeBtn:hover {
                 color: #F8FAFC;
@@ -143,11 +150,10 @@ class SettingsDialog(QDialog):
                 background: #171B24;
                 border: 1px solid #1E232D;
                 border-radius: 8px;
-                padding: 16px;
             }
             QLabel#fieldTitle {
                 color: #A898EA;
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: 600;
             }
             QLabel#fieldDesc {
@@ -157,7 +163,7 @@ class SettingsDialog(QDialog):
             }
             QLineEdit, QComboBox, QSpinBox {
                 background: #12151C;
-                border: 1px solid #1E232D;
+                border: 1px solid #2A3140;
                 border-radius: 6px;
                 padding: 8px;
                 color: #F8FAFC;
