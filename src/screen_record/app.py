@@ -1,0 +1,327 @@
+from __future__ import annotations
+
+import queue
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtWidgets import QApplication
+
+from screen_record.capture.ffmpeg import FFmpegVideoWriter
+from screen_record.capture.keystrokes import KeyEventCollector
+from screen_record.capture.providers import FramePayload, default_region_for_primary_screen, make_capture_provider
+from screen_record.capture.session import SessionMetadata, create_session_paths
+from screen_record.models import AppSettings, CaptureRegion
+from screen_record.render.ffmpeg_renderer import render_final_video
+from screen_record.render.timeline import build_timeline_payload, coerce_segments, load_timeline, write_timeline
+from screen_record.settings import SettingsStore, resolve_ffmpeg_path
+from screen_record.ui.main_window import RecorderWindow
+from screen_record.ui.region_selector import RegionSelector
+
+
+class SessionClock:
+    def __init__(self) -> None:
+        self._started = time.monotonic()
+        self._pause_started: float | None = None
+        self._paused_total = 0.0
+
+    def set_paused(self, paused: bool) -> None:
+        if paused and self._pause_started is None:
+            self._pause_started = time.monotonic()
+        elif not paused and self._pause_started is not None:
+            self._paused_total += time.monotonic() - self._pause_started
+            self._pause_started = None
+
+    def elapsed_ms(self) -> int:
+        now = self._pause_started if self._pause_started is not None else time.monotonic()
+        return int((now - self._started - self._paused_total) * 1000)
+
+
+@dataclass(slots=True)
+class RecorderSnapshot:
+    elapsed_ms: int = 0
+    file_size_bytes: int = 0
+    keystrokes: int = 0
+    active: bool = False
+    paused: bool = False
+
+
+class RecorderController(QObject):
+    statsUpdated = Signal(int, int, int)
+    stateChanged = Signal(bool, bool)
+    errorRaised = Signal(str)
+    sessionSaved = Signal(str)
+
+    def __init__(self, settings: AppSettings) -> None:
+        super().__init__()
+        self.settings = settings
+        self._capture_thread: threading.Thread | None = None
+        self._writer_thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._frame_queue: queue.Queue[FramePayload] = queue.Queue(maxsize=3)
+        self._collector = KeyEventCollector()
+        self._clock: SessionClock | None = None
+        self._writer: FFmpegVideoWriter | None = None
+        self._session_paths = None
+        self._started_at: datetime | None = None
+        self._snapshot = RecorderSnapshot()
+        self._snapshot_lock = threading.Lock()
+        self._dropped_frames = 0
+        self._active_region: CaptureRegion | None = None
+
+    def start(self, region: CaptureRegion) -> None:
+        if self._snapshot.active:
+            return
+
+        ffmpeg_path = resolve_ffmpeg_path(self.settings.ffmpeg_path)
+        self._session_paths = create_session_paths(self.settings.resolved_save_dir())
+        self._active_region = region
+        self._stop_event.clear()
+        self._frame_queue = queue.Queue(maxsize=3)
+        self._collector = KeyEventCollector()
+        self._collector.start()
+        self._clock = SessionClock()
+        self._started_at = datetime.now()
+        self._dropped_frames = 0
+        self._writer = FFmpegVideoWriter(
+            ffmpeg_path=ffmpeg_path,
+            output_path=self._session_paths.source_video,
+            width=region.width,
+            height=region.height,
+            fps=self.settings.target_fps,
+        )
+        self._writer.start()
+
+        with self._snapshot_lock:
+            self._snapshot = RecorderSnapshot(active=True, paused=False)
+
+        self._capture_thread = threading.Thread(target=self._capture_loop, args=(region,), daemon=True)
+        self._writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self._capture_thread.start()
+        self._writer_thread.start()
+        self.stateChanged.emit(True, False)
+
+    def toggle_pause(self) -> None:
+        if not self._snapshot.active or self._clock is None:
+            return
+        paused = not self._snapshot.paused
+        self._clock.set_paused(paused)
+        self._collector.set_paused(paused, self._clock.elapsed_ms())
+        with self._snapshot_lock:
+            self._snapshot.paused = paused
+        self.stateChanged.emit(True, paused)
+
+    def stop(self) -> None:
+        if not self._snapshot.active:
+            return
+        threading.Thread(target=self._stop_worker, daemon=True).start()
+
+    def rerender(self, session_dir: str) -> None:
+        threading.Thread(target=self._rerender_worker, args=(session_dir,), daemon=True).start()
+
+    def _stop_worker(self) -> None:
+        self._stop_event.set()
+        if self._capture_thread:
+            self._capture_thread.join(timeout=5)
+        if self._writer_thread:
+            self._writer_thread.join(timeout=5)
+        self._collector.stop()
+        if self._writer:
+            self._writer.stop()
+
+        try:
+            self._finalize_session()
+        except Exception as exc:
+            self.errorRaised.emit(str(exc))
+        finally:
+            with self._snapshot_lock:
+                self._snapshot.active = False
+                self._snapshot.paused = False
+            self.stateChanged.emit(False, False)
+
+    def _rerender_worker(self, session_dir: str) -> None:
+        session_path = Path(session_dir)
+        payload = load_timeline(session_path / "timeline.json")
+        resolution = payload["session"]["resolution"]
+        render_final_video(
+            ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
+            source_video=session_path / "source.mp4",
+            final_video=session_path / "final.mp4",
+            width=int(resolution["width"]),
+            height=int(resolution["height"]),
+            style=payload.get("style", {}),
+            segments=coerce_segments(payload),
+            work_dir=session_path,
+        )
+        self.sessionSaved.emit(str(session_path))
+
+    def poll(self) -> None:
+        with self._snapshot_lock:
+            snapshot = RecorderSnapshot(
+                elapsed_ms=self._snapshot.elapsed_ms,
+                file_size_bytes=self._snapshot.file_size_bytes,
+                keystrokes=self._snapshot.keystrokes,
+                active=self._snapshot.active,
+                paused=self._snapshot.paused,
+            )
+        self.statsUpdated.emit(snapshot.elapsed_ms, snapshot.file_size_bytes, snapshot.keystrokes)
+
+    def _capture_loop(self, region: CaptureRegion) -> None:
+        provider = make_capture_provider(region)
+        frame_interval = 1 / max(1, self.settings.target_fps)
+        next_tick = time.monotonic()
+
+        while not self._stop_event.is_set():
+            if self._snapshot.paused:
+                time.sleep(0.05)
+                continue
+
+            now = time.monotonic()
+            if now < next_tick:
+                time.sleep(next_tick - now)
+                continue
+
+            frame = provider.grab()
+            try:
+                self._frame_queue.put_nowait(frame)
+            except queue.Full:
+                try:
+                    self._frame_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                self._frame_queue.put_nowait(frame)
+                self._dropped_frames += 1
+
+            elapsed_ms = self._clock.elapsed_ms() if self._clock else 0
+            file_size = self._session_paths.source_video.stat().st_size if self._session_paths and self._session_paths.source_video.exists() else 0
+            with self._snapshot_lock:
+                self._snapshot.elapsed_ms = elapsed_ms
+                self._snapshot.file_size_bytes = file_size
+                self._snapshot.keystrokes = len(self._collector.snapshot())
+            next_tick += frame_interval
+            if next_tick < now - frame_interval:
+                next_tick = now + frame_interval
+
+    def _writer_loop(self) -> None:
+        while not self._stop_event.is_set() or not self._frame_queue.empty():
+            try:
+                frame = self._frame_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                if self._writer:
+                    self._writer.write_frame(frame.bytes_bgra)
+            except Exception as exc:
+                self.errorRaised.emit(str(exc))
+                self._stop_event.set()
+                return
+
+    def _finalize_session(self) -> None:
+        if not self._session_paths or not self._clock or not self._started_at or not self._active_region:
+            return
+
+        elapsed_ms = self._clock.elapsed_ms()
+        events = self._collector.snapshot()
+        session = SessionMetadata.build(
+            duration_ms=elapsed_ms,
+            fps=self.settings.target_fps,
+            width=self._active_region.width,
+            height=self._active_region.height,
+            monitor="primary",
+            region=self._active_region,
+            started_at=self._started_at,
+        )
+        payload = build_timeline_payload(
+            session=session,
+            events=events,
+            keystroke_count=len(events),
+            pause_spans=self._collector.pause_spans(),
+        )
+        payload["stats"]["dropped_frames"] = self._dropped_frames
+        write_timeline(self._session_paths.timeline_file, payload)
+        render_final_video(
+            ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
+            source_video=self._session_paths.source_video,
+            final_video=self._session_paths.final_video,
+            width=self._active_region.width,
+            height=self._active_region.height,
+            style=payload.get("style", {}),
+            segments=coerce_segments(payload),
+            work_dir=self._session_paths.directory,
+        )
+        self.sessionSaved.emit(str(self._session_paths.directory))
+
+
+class ScreenRecordApplication(QObject):
+    def __init__(self, app: QApplication) -> None:
+        super().__init__()
+        self._app = app
+        self.settings_store = SettingsStore()
+        self.settings = self.settings_store.load()
+        self.controller = RecorderController(self.settings)
+        self.window = RecorderWindow(self.settings)
+        self.selector = RegionSelector()
+        self._selected_region: CaptureRegion | None = None
+
+        self.window.startRequested.connect(self._start_recording)
+        self.window.stopRequested.connect(self.controller.stop)
+        self.window.pauseToggled.connect(self.controller.toggle_pause)
+        self.window.settingsRequested.connect(self._open_settings)
+        self.window.renderAgainRequested.connect(self.controller.rerender)
+        self.controller.statsUpdated.connect(self.window.update_metrics)
+        self.controller.stateChanged.connect(self.window.set_recording_state)
+        self.controller.errorRaised.connect(self.window.show_error)
+        self.controller.sessionSaved.connect(self._handle_saved_session)
+        self.selector.regionSelected.connect(self._begin_recording_with_region)
+        self.selector.selectionCancelled.connect(self.window.showNormal)
+
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(250)
+        self._poll_timer.timeout.connect(self.controller.poll)
+        self._poll_timer.start()
+
+        self.window.show()
+        self.window.set_recording_state(active=False, paused=False)
+
+    def _start_recording(self) -> None:
+        if self.settings.capture_mode == "region":
+            self.window.hide()
+            self.selector.start()
+            return
+        self._begin_recording_with_region(default_region_for_primary_screen())
+
+    def _begin_recording_with_region(self, region: CaptureRegion) -> None:
+        self.window.show()
+        self.window.raise_()
+        self._selected_region = region
+        self.window.update_scope(f"{region.width}×{region.height}")
+        try:
+            self.controller.start(region)
+        except Exception as exc:
+            self.window.show_error(str(exc))
+
+    def _open_settings(self) -> None:
+        updated = self.window.prompt_settings(self.settings)
+        if updated is None:
+            return
+        self.settings = updated
+        self.settings_store.save(updated)
+        self.controller.settings = updated
+        self.window.update_scope(updated.capture_mode.replace("_", " ").title())
+
+    def _handle_saved_session(self, session_dir: str) -> None:
+        self.window.update_metrics(0, 0, 0)
+        self.window.update_scope(self.settings.capture_mode.replace("_", " ").title())
+        self.window.show_completion(Path(session_dir))
+
+
+def main() -> None:
+    app = QApplication(sys.argv)
+    app.setApplicationName("Screen Record")
+    app.setOrganizationName("Kilo")
+    controller = ScreenRecordApplication(app)
+    sys.exit(app.exec())
