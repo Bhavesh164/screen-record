@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -49,34 +48,6 @@ class StatCard(QFrame):
         self.value_label.setText(value)
 
 
-class ControlButton(QPushButton):
-    """A stylized bottom-bar control button with icon + label stacked."""
-
-    def __init__(self, icon_text: str, label_text: str, object_name: str) -> None:
-        super().__init__()
-        self.setObjectName(object_name)
-        self.setMinimumHeight(54)
-
-        icon_lbl = QLabel(icon_text)
-        icon_lbl.setObjectName(f"{object_name}Icon")
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        text_lbl = QLabel(label_text)
-        text_lbl.setObjectName(f"{object_name}Text")
-        text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._text_lbl = text_lbl
-        self._icon_lbl = icon_lbl
-
-        inner = QVBoxLayout(self)
-        inner.setContentsMargins(0, 6, 0, 6)
-        inner.setSpacing(2)
-        inner.addWidget(icon_lbl)
-        inner.addWidget(text_lbl)
-
-    def set_label(self, icon: str, text: str) -> None:
-        self._icon_lbl.setText(icon)
-        self._text_lbl.setText(text)
-
-
 class RecorderWindow(QMainWindow):
     startRequested = Signal()
     stopRequested = Signal()
@@ -89,6 +60,7 @@ class RecorderWindow(QMainWindow):
         self.setWindowTitle("CaptoKey")
         self.setFixedSize(300, 420)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._latest_session_dir: Path | None = None
         self._paused = False
         self._recording_active = False
@@ -121,7 +93,7 @@ class RecorderWindow(QMainWindow):
         record_shell.setSpacing(8)
         self.record_button = QPushButton("")
         self.record_button.setObjectName("recordButton")
-        self.record_button.clicked.connect(self._toggle_start_stop)
+        self.record_button.clicked.connect(self._on_record_clicked)
         self.recording_label = QLabel("Ready to record")
         self.recording_label.setObjectName("recordingLabel")
         self.scope_label = QLabel(settings.capture_mode.replace("_", " ").title())
@@ -149,11 +121,14 @@ class RecorderWindow(QMainWindow):
         # ── Bottom controls ──────────────────────────────────────
         controls = QHBoxLayout()
         controls.setSpacing(10)
-        self.pause_button = ControlButton("⏸", "Pause", "pauseBtn")
-        self.pause_button.clicked.connect(self._toggle_pause)
-        self.stop_button = ControlButton("⏹", "Stop", "stopBtn")
-        self.stop_button.clicked.connect(self.stopRequested.emit)
-        self.settings_button = ControlButton("⚙", "Settings", "settingsBtn")
+        self.pause_button = QPushButton("⏸\nPause")
+        self.pause_button.setObjectName("pauseBtn")
+        self.pause_button.clicked.connect(self._on_pause_clicked)
+        self.stop_button = QPushButton("⏹\nStop")
+        self.stop_button.setObjectName("stopBtn")
+        self.stop_button.clicked.connect(self._on_stop_clicked)
+        self.settings_button = QPushButton("⚙\nSettings")
+        self.settings_button.setObjectName("settingsBtn")
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
@@ -161,18 +136,18 @@ class RecorderWindow(QMainWindow):
         layout.addLayout(controls)
 
         # ── Shortcut hint ────────────────────────────────────────
-        hint = QLabel("R: Record  ·  P: Pause  ·  S: Stop")
+        hint = QLabel("⌘R: Record  ·  ⌘P: Pause  ·  ⌘S: Stop")
         hint.setObjectName("shortcutHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
-        # ── Keyboard shortcuts ───────────────────────────────────
-        self._shortcut_r = QShortcut(QKeySequence("R"), self)
-        self._shortcut_r.activated.connect(self._toggle_start_stop)
-        self._shortcut_p = QShortcut(QKeySequence("P"), self)
-        self._shortcut_p.activated.connect(self._toggle_pause)
-        self._shortcut_s = QShortcut(QKeySequence("S"), self)
-        self._shortcut_s.activated.connect(self._on_stop_shortcut)
+        # ── Keyboard shortcuts (Cmd+key on macOS) ────────────────
+        self._shortcut_r = QShortcut(QKeySequence("Ctrl+R"), self)
+        self._shortcut_r.activated.connect(self._on_record_clicked)
+        self._shortcut_p = QShortcut(QKeySequence("Ctrl+P"), self)
+        self._shortcut_p.activated.connect(self._on_pause_clicked)
+        self._shortcut_s = QShortcut(QKeySequence("Ctrl+S"), self)
+        self._shortcut_s.activated.connect(self._on_stop_clicked)
 
         self.setStyleSheet(_MAIN_STYLESHEET)
 
@@ -217,10 +192,7 @@ class RecorderWindow(QMainWindow):
                 "border-radius: 10px; font-size: 11px; font-weight: 600;"
             )
             self.recording_label.setText("Ready to record")
-        if paused:
-            self.pause_button.set_label("▶", "Resume")
-        else:
-            self.pause_button.set_label("⏸", "Pause")
+        self.pause_button.setText("▶\nResume" if paused else "⏸\nPause")
         self.record_button.setEnabled(not active)
         self.stop_button.setEnabled(active)
         self.pause_button.setEnabled(active)
@@ -248,7 +220,6 @@ class RecorderWindow(QMainWindow):
 
     def show_completion(self, session_dir: Path) -> None:
         self._latest_session_dir = session_dir
-        # Restore the window so the user can see the completion dialog
         self.showNormal()
         self.raise_()
         message = QMessageBox(self)
@@ -273,15 +244,15 @@ class RecorderWindow(QMainWindow):
         QMessageBox.critical(self, "CaptoKey", message)
 
     # ── Private slots ────────────────────────────────────────────
-    def _toggle_start_stop(self) -> None:
+    def _on_record_clicked(self) -> None:
         if not self._recording_active:
             self.startRequested.emit()
 
-    def _toggle_pause(self) -> None:
+    def _on_pause_clicked(self) -> None:
         if self._recording_active:
             self.pauseToggled.emit()
 
-    def _on_stop_shortcut(self) -> None:
+    def _on_stop_clicked(self) -> None:
         if self._recording_active:
             self.stopRequested.emit()
 
@@ -397,55 +368,36 @@ QPushButton#pauseBtn, QPushButton#stopBtn, QPushButton#settingsBtn {
     background: #1A1E27;
     border: 1px solid #242A38;
     border-radius: 12px;
-    min-height: 54px;
-    color: #F8FAFC;
-}
-QPushButton#pauseBtn QLabel, QPushButton#settingsBtn QLabel {
-    color: #9AA4B2;
-    background: transparent;
-    border: none;
+    min-height: 58px;
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #C8CED8;
 }
 QPushButton#pauseBtn:hover, QPushButton#settingsBtn:hover {
     background: #242A38;
     border-color: #3A4258;
+    color: #F8FAFC;
 }
-QPushButton#pauseBtnIcon, QPushButton#settingsBtnIcon {
-    font-size: 18px;
-}
-QPushButton#pauseBtnText, QPushButton#settingsBtnText {
-    font-size: 11px;
-    font-weight: 600;
-}
-QLabel#pauseBtnIcon, QLabel#settingsBtnIcon {
-    font-size: 18px;
-    color: #9AA4B2;
-}
-QLabel#pauseBtnText, QLabel#settingsBtnText {
-    font-size: 11px;
-    font-weight: 600;
-    color: #9AA4B2;
+QPushButton#pauseBtn:disabled, QPushButton#settingsBtn:disabled {
+    color: #4A5060;
+    border-color: #1E232D;
 }
 
 QPushButton#stopBtn {
     background: #2A1418;
     border-color: #4D2229;
+    color: #FF6B6B;
 }
 QPushButton#stopBtn:hover {
     background: #3D1C22;
     border-color: #6B3038;
+    color: #FF8888;
 }
-QLabel#stopBtnIcon {
-    font-size: 18px;
-    color: #FF4D4D;
-}
-QLabel#stopBtnText {
-    font-size: 11px;
-    font-weight: 600;
-    color: #FF4D4D;
-}
-
-QPushButton#pauseBtn:disabled, QPushButton#stopBtn:disabled, QPushButton#settingsBtn:disabled {
-    opacity: 0.4;
+QPushButton#stopBtn:disabled {
+    background: #1A1E27;
+    border-color: #242A38;
+    color: #4A5060;
 }
 
 /* ── Shortcut hint ── */

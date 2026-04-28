@@ -26,14 +26,16 @@ class SettingsDialog(QDialog):
         self.setObjectName("settingsDialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(480, 480)
+        self.setMinimumSize(480, 520)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_start = None
 
         self.save_dir_edit = QLineEdit(settings.save_dir)
         self.save_dir_edit.setMinimumWidth(220)
         browse_button = QPushButton("Browse")
+        browse_button.setObjectName("browseBtn")
         browse_button.clicked.connect(self._browse_directory)
 
         self.fps_spin = QSpinBox()
@@ -49,8 +51,8 @@ class SettingsDialog(QDialog):
         self.ffmpeg_edit = QLineEdit(settings.ffmpeg_path)
 
         section_layout = QVBoxLayout()
-        section_layout.setSpacing(16)
-        section_layout.setContentsMargins(16, 16, 16, 16)
+        section_layout.setSpacing(18)
+        section_layout.setContentsMargins(18, 18, 18, 18)
 
         def make_field(title_text: str, desc_text: str, widget: QWidget) -> QVBoxLayout:
             vbox = QVBoxLayout()
@@ -69,7 +71,7 @@ class SettingsDialog(QDialog):
         loc_layout = QHBoxLayout(loc_widget)
         loc_layout.setContentsMargins(0, 0, 0, 0)
         loc_layout.setSpacing(8)
-        loc_layout.addWidget(self.save_dir_edit)
+        loc_layout.addWidget(self.save_dir_edit, 1)
         loc_layout.addWidget(browse_button)
         section_layout.addLayout(make_field("Save Location", "Choose where recorded videos will be saved.", loc_widget))
 
@@ -103,95 +105,28 @@ class SettingsDialog(QDialog):
         title.setObjectName("dialogTitle")
         close_btn = QPushButton("✕")
         close_btn.setObjectName("closeBtn")
-        close_btn.setFixedSize(24, 24)
+        close_btn.setFixedSize(26, 26)
         close_btn.clicked.connect(self.reject)
         title_layout.addWidget(title)
         title_layout.addStretch(1)
         title_layout.addWidget(close_btn)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(12)
-        root.addLayout(title_layout)
-        root.addWidget(section)
-        root.addStretch(1)
-        root.addLayout(buttons)
+        # Wrap everything in a container widget for rounded corners
+        container = QWidget()
+        container.setObjectName("settingsContainer")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(22, 20, 22, 20)
+        container_layout.setSpacing(12)
+        container_layout.addLayout(title_layout)
+        container_layout.addWidget(section)
+        container_layout.addStretch(1)
+        container_layout.addLayout(buttons)
 
-        self.setStyleSheet(
-            """
-            QDialog#settingsDialog {
-                background: #12151C;
-                border: 1px solid #1E232D;
-                border-radius: 10px;
-            }
-            QLabel {
-                background: transparent;
-                border: none;
-                color: #F8FAFC;
-            }
-            QLabel#dialogTitle {
-                font-size: 16px;
-                font-weight: 600;
-            }
-            QPushButton#closeBtn {
-                background: transparent;
-                border: none;
-                color: #9AA4B2;
-                font-size: 16px;
-                padding: 0;
-            }
-            QPushButton#closeBtn:hover {
-                color: #F8FAFC;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
-            }
-            QFrame#settingsSection {
-                background: #171B24;
-                border: 1px solid #1E232D;
-                border-radius: 8px;
-            }
-            QLabel#fieldTitle {
-                color: #A898EA;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QLabel#fieldDesc {
-                color: #9AA4B2;
-                font-size: 11px;
-                margin-bottom: 4px;
-            }
-            QLineEdit, QComboBox, QSpinBox {
-                background: #12151C;
-                border: 1px solid #2A3140;
-                border-radius: 6px;
-                padding: 8px;
-                color: #F8FAFC;
-                min-height: 20px;
-            }
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-                border-color: #A898EA;
-            }
-            QPushButton {
-                background: #1E232D;
-                border: 1px solid #2A3140;
-                border-radius: 6px;
-                padding: 8px 16px;
-                color: #F8FAFC;
-            }
-            QPushButton:hover {
-                background: #2A3140;
-            }
-            QPushButton#primaryButton {
-                background: #A898EA;
-                color: #12151C;
-                font-weight: 600;
-                border: none;
-            }
-            QPushButton#primaryButton:hover {
-                background: #B8A8FA;
-            }
-            """
-        )
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(container)
+
+        self.setStyleSheet(_SETTINGS_STYLESHEET)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -218,3 +153,137 @@ class SettingsDialog(QDialog):
         if directory:
             self.save_dir_edit.setText(directory)
 
+
+_SETTINGS_STYLESHEET = """
+QDialog#settingsDialog {
+    background: transparent;
+}
+QWidget#settingsContainer {
+    background: #12151C;
+    border: 1px solid #1E232D;
+    border-radius: 14px;
+}
+QLabel {
+    background: transparent;
+    border: none;
+    color: #F8FAFC;
+}
+QLabel#dialogTitle {
+    font-size: 16px;
+    font-weight: 600;
+}
+QPushButton#closeBtn {
+    background: transparent;
+    border: none;
+    color: #9AA4B2;
+    font-size: 16px;
+    padding: 0;
+}
+QPushButton#closeBtn:hover {
+    color: #F8FAFC;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+QFrame#settingsSection {
+    background: #171B24;
+    border: 1px solid #1E232D;
+    border-radius: 10px;
+}
+QLabel#fieldTitle {
+    color: #A898EA;
+    font-size: 13px;
+    font-weight: 600;
+}
+QLabel#fieldDesc {
+    color: #9AA4B2;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+QLineEdit, QComboBox, QSpinBox {
+    background: #12151C;
+    border: 1px solid #2A3140;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #F8FAFC;
+    min-height: 22px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+    border-color: #A898EA;
+}
+
+/* ── ComboBox dropdown arrow ── */
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 30px;
+    border: none;
+    border-left: 1px solid #2A3140;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    background: transparent;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #9AA4B2;
+    width: 0;
+    height: 0;
+    margin-right: 8px;
+}
+QComboBox QAbstractItemView {
+    background: #12151C;
+    border: 1px solid #2A3140;
+    border-radius: 6px;
+    color: #F8FAFC;
+    selection-background-color: #A898EA;
+    selection-color: #12151C;
+    padding: 4px;
+}
+
+/* ── SpinBox buttons ── */
+QSpinBox::up-button, QSpinBox::down-button {
+    background: transparent;
+    border: none;
+    width: 20px;
+}
+QSpinBox::up-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid #9AA4B2;
+    width: 0;
+    height: 0;
+}
+QSpinBox::down-arrow {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #9AA4B2;
+    width: 0;
+    height: 0;
+}
+
+/* ── Buttons ── */
+QPushButton {
+    background: #1E232D;
+    border: 1px solid #2A3140;
+    border-radius: 8px;
+    padding: 9px 18px;
+    color: #F8FAFC;
+}
+QPushButton:hover {
+    background: #2A3140;
+}
+QPushButton#browseBtn {
+    min-width: 70px;
+}
+QPushButton#primaryButton {
+    background: #A898EA;
+    color: #12151C;
+    font-weight: 600;
+    border: none;
+    padding: 9px 24px;
+}
+QPushButton#primaryButton:hover {
+    background: #B8A8FA;
+}
+"""
