@@ -21,7 +21,18 @@ from PySide6.QtWidgets import (
 
 
 def _platform_shortcuts() -> tuple[QKeySequence, QKeySequence, QKeySequence]:
-    """Return (record, pause, stop) key sequences."""
+    """Return (record, pause, stop) key sequences.
+
+    On macOS ``Meta`` maps to the physical **Control** key (``⌃``),
+    while ``Ctrl`` maps to **Command** (``⌘``).  We want the physical
+    Control key on every platform.
+    """
+    if sys.platform == "darwin":
+        return (
+            QKeySequence("Meta+Alt+J"),   # ⌃⌥J  (Ctrl+Opt+J)
+            QKeySequence("Meta+Alt+K"),   # ⌃⌥K
+            QKeySequence("Meta+Alt+L"),   # ⌃⌥L
+        )
     return (
         QKeySequence("Ctrl+Alt+J"),
         QKeySequence("Ctrl+Alt+K"),
