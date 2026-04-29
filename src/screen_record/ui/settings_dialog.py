@@ -250,11 +250,14 @@ QComboBox#captureCombo::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: center right;
     width: 32px;
-    background: #1A1E27;
+    background: #4A5060;
     border: none;
-    border-left: 1px solid #2A3140;
+    border-left: 1px solid #5A6374;
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
+}
+QComboBox#captureCombo::drop-down:hover {
+    background: #5A6374;
 }
 QComboBox#captureCombo QAbstractItemView {
     background: #12151C;
@@ -272,9 +275,9 @@ QSpinBox {
     padding-right: 28px;
 }
 QSpinBox::up-button, QSpinBox::down-button {
-    background: #1A1E27;
+    background: #4A5060;
     border: none;
-    border-left: 1px solid #2A3140;
+    border-left: 1px solid #5A6374;
     width: 22px;
 }
 QSpinBox::up-button {
@@ -288,7 +291,7 @@ QSpinBox::down-button {
     border-bottom-right-radius: 8px;
 }
 QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background: #242A38;
+    background: #5A6374;
 }
 
 /* ── Buttons ── */

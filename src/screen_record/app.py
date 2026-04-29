@@ -15,32 +15,67 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 
-def _macos_screen_capture_allowed() -> tuple[bool, str | None]:
-    """Check whether the current process has macOS screen-recording permission.
+def _macos_ensure_screen_capture() -> tuple[bool, str | None]:
+    """Request/verify macOS screen-recording permission.
 
-    Returns (allowed, message).  *message* is non-None when permission is denied
-    and contains instructions for the user.
+    Uses ``CGRequestScreenCaptureAccess`` (macOS 10.15+) which shows the
+    system permission dialog when needed.  After the API claims permission
+    is granted we do a real ``mss`` test grab to confirm it actually works
+    in this process – a restart is sometimes required.
+
+    Returns *(allowed, message)*.  *message* is non-None when permission is
+    denied or needs a restart.
     """
     if platform.system() != "Darwin":
         return True, None
+
+    denied_msg = (
+        "Screen recording permission is required.\n\n"
+        "1. Open System Settings → Privacy & Security → Screen Recording\n"
+        "2. Make sure CaptoKey is enabled (toggle ON)\n"
+        "3. Restart CaptoKey completely (quit and reopen)\n\n"
+        "If you just rebuilt the app, remove CaptoKey from the list, add it again, then restart."
+    )
+
+    # 1. Try the modern API first – it shows the system dialog if needed.
     try:
         cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        if not hasattr(cg, "CGPreflightScreenCaptureAccess"):
-            return True, None
-        if cg.CGPreflightScreenCaptureAccess():
-            return True, None
+        if hasattr(cg, "CGRequestScreenCaptureAccess"):
+            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+            granted = cg.CGRequestScreenCaptureAccess()
+            if granted:
+                # The API says yes, but macOS often still requires a process
+                # restart before CoreGraphics capture APIs actually succeed.
+                try:
+                    import mss
+
+                    with mss.mss() as sct:
+                        sct.grab(sct.monitors[0])
+                    return True, None
+                except Exception:
+                    return (
+                        False,
+                        (
+                            "Screen recording permission was granted, but a restart is required for it to take effect.\n\n"
+                            "Please quit CaptoKey completely and reopen it."
+                        ),
+                    )
+            # Explicitly denied by user (or dialog dismissed).
+            return False, denied_msg
     except Exception:
+        pass
+
+    # 2. Fallback for older macOS – try a direct capture.
+    try:
+        import mss
+
+        with mss.mss() as sct:
+            sct.grab(sct.monitors[0])
         return True, None
-    return (
-        False,
-        (
-            "CaptoKey needs screen recording permission.\n\n"
-            "1. Open System Settings → Privacy & Security → Screen Recording\n"
-            "2. Make sure CaptoKey is enabled\n"
-            "3. Restart CaptoKey completely (quit and reopen)\n\n"
-            "If you just rebuilt the app, remove CaptoKey from the list and add it again, then restart."
-        ),
-    )
+    except Exception:
+        pass
+
+    return False, denied_msg
 
 from screen_record.capture.ffmpeg import FFmpegVideoWriter
 from screen_record.capture.keystrokes import KeyEventCollector
@@ -393,7 +428,7 @@ class ScreenRecordApplication(QObject):
         self.window.set_recording_state(active=False, paused=False)
 
     def _start_recording(self) -> None:
-        allowed, msg = _macos_screen_capture_allowed()
+        allowed, msg = _macos_ensure_screen_capture()
         if not allowed:
             self.window.show_error(msg)
             return
