@@ -237,18 +237,25 @@ class RecorderWindow(QMainWindow):
         layout.addLayout(controls)
 
         # ── Shortcut hint ────────────────────────────────────────
-        hint = QLabel("⌘R: Record  ·  ⌘P: Pause  ·  ⌘S: Stop")
+        _seq_start = QKeySequence("Ctrl+Alt+J")
+        _seq_pause = QKeySequence("Ctrl+Alt+K")
+        _seq_stop = QKeySequence("Ctrl+Alt+L")
+        hint = QLabel(
+            f"{_seq_start.toString()}: Record  ·  "
+            f"{_seq_pause.toString()}: Pause  ·  "
+            f"{_seq_stop.toString()}: Stop"
+        )
         hint.setObjectName("shortcutHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
-        # ── Keyboard shortcuts (Cmd+key on macOS) ────────────────
-        self._shortcut_r = QShortcut(QKeySequence("Ctrl+R"), self)
-        self._shortcut_r.activated.connect(self._on_record_clicked)
-        self._shortcut_p = QShortcut(QKeySequence("Ctrl+P"), self)
-        self._shortcut_p.activated.connect(self._on_pause_clicked)
-        self._shortcut_s = QShortcut(QKeySequence("Ctrl+S"), self)
-        self._shortcut_s.activated.connect(self._on_stop_clicked)
+        # ── Keyboard shortcuts (Cmd+Option on macOS) ─────────────
+        self._shortcut_start = QShortcut(_seq_start, self)
+        self._shortcut_start.activated.connect(self._on_record_clicked)
+        self._shortcut_pause = QShortcut(_seq_pause, self)
+        self._shortcut_pause.activated.connect(self._on_pause_clicked)
+        self._shortcut_stop = QShortcut(_seq_stop, self)
+        self._shortcut_stop.activated.connect(self._on_stop_clicked)
 
         self.setStyleSheet(_MAIN_STYLESHEET)
 
