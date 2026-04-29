@@ -259,11 +259,7 @@ class RecorderWindow(QMainWindow):
 
         # ── Shortcut hint ────────────────────────────────────────
         _seq_start, _seq_pause, _seq_stop = _platform_shortcuts()
-        hint = QLabel(
-            f"{_seq_start.toString()}: Record  ·  "
-            f"{_seq_pause.toString()}: Pause  ·  "
-            f"{_seq_stop.toString()}: Stop"
-        )
+        hint = QLabel("Ctrl+Alt+J: Record  ·  Ctrl+Alt+K: Pause  ·  Ctrl+Alt+L: Stop")
         hint.setObjectName("shortcutHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
