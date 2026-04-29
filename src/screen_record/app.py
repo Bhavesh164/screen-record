@@ -469,10 +469,9 @@ class ScreenRecordApplication(QObject):
 
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         self.window.set_recording_state(active, paused)
-        if not active:
-            # Recording stopped → show the window again
-            self.window.showNormal()
-            self.window.raise_()
+        self.window.showNormal()
+        self.window.raise_()
+        self.window.activateWindow()
 
     def _open_settings(self) -> None:
         updated = self.window.prompt_settings(self.settings)

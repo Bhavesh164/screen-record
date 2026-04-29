@@ -49,13 +49,29 @@ class SettingsDialog(QDialog):
 
         # ── Capture mode (custom combo) ──
         self._capture_mode_value = settings.capture_mode
-        self.capture_mode_btn = QPushButton()
-        self.capture_mode_btn.setObjectName("captureCombo")
-        capture_menu = QMenu(self.capture_mode_btn)
-        capture_menu.setObjectName("captureMenu")
-        capture_menu.addAction("Full display", lambda: self._set_capture_mode("full_display", "Full display"))
-        capture_menu.addAction("Select region each time", lambda: self._set_capture_mode("region", "Select region each time"))
-        self.capture_mode_btn.setMenu(capture_menu)
+        self.capture_mode_text = QLabel("Full display")
+        self.capture_mode_text.setObjectName("captureComboText")
+        capture_arrow = QLabel("▼")
+        capture_arrow.setObjectName("captureComboArrow")
+        capture_arrow.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        capture_inner = QHBoxLayout()
+        capture_inner.setContentsMargins(12, 8, 12, 8)
+        capture_inner.setSpacing(0)
+        capture_inner.addWidget(self.capture_mode_text, 1)
+        capture_inner.addWidget(capture_arrow)
+
+        self.capture_mode_frame = QFrame()
+        self.capture_mode_frame.setObjectName("captureCombo")
+        self.capture_mode_frame.setLayout(capture_inner)
+        self.capture_mode_frame.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.capture_mode_frame.installEventFilter(self)
+
+        self._capture_menu = QMenu(self.capture_mode_frame)
+        self._capture_menu.setObjectName("captureMenu")
+        self._capture_menu.addAction("Full display", lambda: self._set_capture_mode("full_display", "Full display"))
+        self._capture_menu.addAction("Select region each time", lambda: self._set_capture_mode("region", "Select region each time"))
+
         self._set_capture_mode(
             settings.capture_mode,
             "Full display" if settings.capture_mode == "full_display" else "Select region each time",
@@ -142,7 +158,7 @@ class SettingsDialog(QDialog):
         section_layout.setContentsMargins(16, 14, 16, 14)
         section_layout.setSpacing(14)
         section_layout.addLayout(make_field("Save Location", "Choose where recorded videos will be saved.", loc_widget))
-        section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_btn))
+        section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_frame))
         section_layout.addLayout(make_field("Frame Rate", "Target frames per second for the recording.", fps_widget))
         section_layout.addLayout(make_field("FFmpeg Path", "Path to the FFmpeg executable.", self.ffmpeg_edit))
         container_layout.addWidget(section)
@@ -167,7 +183,10 @@ class SettingsDialog(QDialog):
 
     def _set_capture_mode(self, value: str, text: str) -> None:
         self._capture_mode_value = value
-        self.capture_mode_btn.setText(f"{text}  ▼")
+        self.capture_mode_text.setText(text)
+
+    def _show_capture_menu(self) -> None:
+        self._capture_menu.popup(self.capture_mode_frame.mapToGlobal(self.capture_mode_frame.rect().bottomLeft()))
 
     def _fps_step_up(self) -> None:
         try:
@@ -184,6 +203,12 @@ class SettingsDialog(QDialog):
             v = 30
         v = max(10, v - 1)
         self.fps_edit.setText(str(v))
+
+    def eventFilter(self, watched, event) -> bool:  # type: ignore[override]
+        if watched is self.capture_mode_frame and event.type() == event.Type.MouseButtonRelease:
+            self._show_capture_menu()
+            return True
+        return super().eventFilter(watched, event)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -284,23 +309,27 @@ QLineEdit::placeholder {
     color: #4A5060;
 }
 
-/* ── Custom combo button ── */
-QPushButton#captureCombo {
+/* ── Custom combo frame ── */
+QFrame#captureCombo {
     background: #0F1219;
     border: 1px solid #2A3140;
     border-radius: 8px;
-    padding: 8px 12px;
-    color: #F8FAFC;
     min-height: 22px;
-    text-align: left;
+}
+QFrame#captureCombo:hover {
+    border-color: #3A4258;
+}
+QLabel#captureComboText {
+    color: #F8FAFC;
     font-size: 13px;
+    background: transparent;
+    border: none;
 }
-QPushButton#captureCombo:focus {
-    border-color: #A898EA;
-}
-QPushButton#captureCombo::menu-indicator {
-    image: none;
-    width: 0px;
+QLabel#captureComboArrow {
+    color: #9AA4B2;
+    font-size: 10px;
+    background: transparent;
+    border: none;
 }
 QMenu#captureMenu {
     background: #12151C;
