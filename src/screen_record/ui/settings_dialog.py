@@ -186,6 +186,7 @@ class SettingsDialog(QDialog):
         self.capture_mode_text.setText(text)
 
     def _show_capture_menu(self) -> None:
+        self._capture_menu.setMinimumWidth(self.capture_mode_frame.width())
         self._capture_menu.popup(self.capture_mode_frame.mapToGlobal(self.capture_mode_frame.rect().bottomLeft()))
 
     def _fps_step_up(self) -> None:
