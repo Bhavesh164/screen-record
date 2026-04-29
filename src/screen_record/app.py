@@ -344,6 +344,7 @@ class ScreenRecordApplication(QObject):
         self.window.set_recording_state(active=False, paused=False)
 
     def _start_recording(self) -> None:
+        self.window.set_starting_state()
         if self.settings.capture_mode == "region":
             self.window.hide()
             self.selector.start()
@@ -365,18 +366,6 @@ class ScreenRecordApplication(QObject):
             self.window.showNormal()
             self.window.show_error(str(exc))
             return
-
-        # Hide the window so it doesn't appear in the recording
-        self.window.hide()
-
-        # Show a system tray notification as recording feedback
-        if self._tray.supportsMessages():
-            self._tray.showMessage(
-                "CaptoKey",
-                "Recording started! Press S to stop.",
-                QSystemTrayIcon.MessageIcon.Information,
-                3000,
-            )
 
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         self.window.set_recording_state(active, paused)

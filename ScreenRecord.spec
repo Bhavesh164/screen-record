@@ -76,5 +76,6 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleShortVersionString": "0.1.0",
             "NSHighResolutionCapable": True,
+            "NSScreenCaptureUsageDescription": "CaptoKey needs screen recording access to capture your screen.",
         },
     )

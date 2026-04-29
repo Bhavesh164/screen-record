@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import QBitmap, QBrush, QColor, QDesktopServices, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -24,6 +24,7 @@ from screen_record.ui.settings_dialog import SettingsDialog
 class StatCard(QFrame):
     def __init__(self, title: str, value: str, icon: str) -> None:
         super().__init__()
+        self.setObjectName("statCard")
         icon_label = QLabel(icon)
         icon_label.setObjectName("statIcon")
         self.title_label = QLabel(title)
@@ -48,6 +49,76 @@ class StatCard(QFrame):
         self.value_label.setText(value)
 
 
+class RecordButton(QPushButton):
+    _RECORD_SIZE = 80
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(self._RECORD_SIZE, self._RECORD_SIZE)
+        self._recording = False
+        self._pulse_phase = False
+        self._apply_circle_mask()
+
+    def set_recording(self, active: bool) -> None:
+        self._recording = active
+        self._pulse_phase = False
+        self.update()
+
+    def toggle_pulse(self) -> None:
+        self._pulse_phase = not self._pulse_phase
+        self.update()
+
+    def _apply_circle_mask(self) -> None:
+        mask = QBitmap(self._RECORD_SIZE, self._RECORD_SIZE)
+        mask.fill(Qt.GlobalColor.color0)
+        painter = QPainter(mask)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QBrush(Qt.GlobalColor.color1))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(0, 0, self._RECORD_SIZE, self._RECORD_SIZE)
+        painter.end()
+        self.setMask(mask)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center = self._RECORD_SIZE // 2
+        radius = center
+
+        if not self.isEnabled():
+            painter.setPen(QPen(QColor("#1E232D"), 2))
+            painter.setBrush(QColor("#6B2A2A"))
+            painter.drawEllipse(2, 2, self._RECORD_SIZE - 4, self._RECORD_SIZE - 4)
+            return
+
+        border_color = QColor("#2A3040")
+        fill_color = QColor("#FF4D4D")
+
+        if self._recording:
+            if self._pulse_phase:
+                border_color = QColor("#4A9B64")
+                fill_color = QColor("#CC3B3B")
+            else:
+                border_color = QColor("#69E18A")
+                fill_color = QColor("#FF4D4D")
+
+        if self.isDown() or self.underMouse():
+            fill_color = fill_color.lighter(110)
+
+        painter.setPen(QPen(border_color, 3))
+        painter.setBrush(fill_color)
+        painter.drawEllipse(4, 4, self._RECORD_SIZE - 8, self._RECORD_SIZE - 8)
+
+        if self._recording:
+            inner_pen = QPen(QColor("#69E18A"), 2)
+            inner_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(inner_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(10, 10, self._RECORD_SIZE - 20, self._RECORD_SIZE - 20)
+
+        painter.end()
+
+
 class RecorderWindow(QMainWindow):
     startRequested = Signal()
     stopRequested = Signal()
@@ -58,7 +129,7 @@ class RecorderWindow(QMainWindow):
     def __init__(self, settings: AppSettings) -> None:
         super().__init__()
         self.setWindowTitle("CaptoKey")
-        self.setFixedSize(300, 420)
+        self.setFixedSize(340, 440)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._latest_session_dir: Path | None = None
@@ -91,7 +162,7 @@ class RecorderWindow(QMainWindow):
         # ── Record button ────────────────────────────────────────
         record_shell = QVBoxLayout()
         record_shell.setSpacing(8)
-        self.record_button = QPushButton("")
+        self.record_button = RecordButton()
         self.record_button.setObjectName("recordButton")
         self.record_button.clicked.connect(self._on_record_clicked)
         self.recording_label = QLabel("Ready to record")
@@ -154,6 +225,9 @@ class RecorderWindow(QMainWindow):
         self._drag_start = None
         self._poller = QTimer(self)
         self._poller.setInterval(250)
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(800)
+        self._pulse_timer.timeout.connect(self._toggle_pulse)
 
     # ── Drag support ─────────────────────────────────────────────
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -178,6 +252,8 @@ class RecorderWindow(QMainWindow):
                 "border-radius: 10px; font-size: 11px; font-weight: 600;"
             )
             self.recording_label.setText("Recording in progress")
+            self.record_button.set_recording(True)
+            self._pulse_timer.start()
         elif active and paused:
             self.status_chip.setText("Paused")
             self.status_chip.setStyleSheet(
@@ -185,6 +261,8 @@ class RecorderWindow(QMainWindow):
                 "border-radius: 10px; font-size: 11px; font-weight: 600;"
             )
             self.recording_label.setText("Recording paused")
+            self.record_button.set_recording(True)
+            self._pulse_timer.stop()
         else:
             self.status_chip.setText("Ready")
             self.status_chip.setStyleSheet(
@@ -192,6 +270,8 @@ class RecorderWindow(QMainWindow):
                 "border-radius: 10px; font-size: 11px; font-weight: 600;"
             )
             self.recording_label.setText("Ready to record")
+            self.record_button.set_recording(False)
+            self._pulse_timer.stop()
         self.pause_button.setText("▶\nResume" if paused else "⏸\nPause")
         self.record_button.setEnabled(not active)
         self.stop_button.setEnabled(active)
@@ -199,10 +279,17 @@ class RecorderWindow(QMainWindow):
 
     def set_starting_state(self) -> None:
         self.status_chip.setText("Starting")
-        self.recording_label.setText("Preparing capture")
+        self.status_chip.setStyleSheet(
+            "background: #3B3A1A; color: #E1D569; padding: 4px 10px; "
+            "border-radius: 10px; font-size: 11px; font-weight: 600;"
+        )
+        self.recording_label.setText("Preparing capture...")
         self.record_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.pause_button.setEnabled(False)
+
+    def _toggle_pulse(self) -> None:
+        self.record_button.toggle_pulse()
 
     def update_metrics(self, elapsed_ms: int, file_size_bytes: int, keystrokes: int) -> None:
         self.timer_label.setText(_format_ms(elapsed_ms))
@@ -319,22 +406,12 @@ QWidget#rootPanel QLabel {
     color: #F8FAFC;
 }
 
-/* ── Record button ── */
+/* ── Record button (custom painted) ── */
 QPushButton#recordButton {
-    min-width: 84px;
-    max-width: 84px;
-    min-height: 84px;
-    max-height: 84px;
-    border-radius: 42px;
-    background: #FF4D4D;
-    border: 6px solid #1E232D;
-}
-QPushButton#recordButton:hover {
-    background: #FF6666;
-}
-QPushButton#recordButton:disabled {
-    background: #6B2A2A;
-    border-color: #1E232D;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
 }
 
 /* ── Recording label ── */
@@ -349,7 +426,7 @@ QLabel#scopeLabel {
 }
 
 /* ── Stat cards ── */
-QFrame {
+QFrame#statCard {
     background: #171B24;
     border: 1px solid #1E232D;
     border-radius: 8px;
@@ -368,7 +445,7 @@ QPushButton#pauseBtn, QPushButton#stopBtn, QPushButton#settingsBtn {
     background: #1A1E27;
     border: 1px solid #242A38;
     border-radius: 12px;
-    min-height: 58px;
+    min-height: 64px;
     padding: 8px 4px;
     font-size: 12px;
     font-weight: 600;

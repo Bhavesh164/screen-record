@@ -31,7 +31,7 @@ def test_groups_events_by_inactivity() -> None:
     assert segments[0].start_ms == 0
     assert segments[1].start_ms == 900
 
-def test_key_collector_disables_pynput_on_macos(monkeypatch) -> None:
+def test_key_collector_graceful_failure_on_macos(monkeypatch) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     collector = KeyEventCollector()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import sys
+import logging
+import platform
 import threading
 from collections import deque
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from typing import Any
 
 from screen_record.models import KeyEvent, PauseSpan, TimelineSegment
 
+logger = logging.getLogger(__name__)
 
 MODIFIER_KEYS = {"ctrl", "ctrl_l", "ctrl_r", "alt", "alt_l", "alt_r", "shift", "shift_l", "shift_r", "cmd", "cmd_l", "cmd_r"}
 SPECIAL_KEY_NAMES = {
@@ -97,17 +99,30 @@ class KeyEventCollector:
 
     def start(self) -> None:
         self._session_start = monotonic()
+
+        # pynput crashes on macOS with HIToolbox thread assertions.
+        # Skip entirely on Darwin.
+        if platform.system() == "Darwin":
+            logger.info("Keyboard capture disabled on macOS")
+            self._platform_capture_supported = False
+            return
+
         try:
             from pynput import keyboard
 
             self._listener = keyboard.Listener(on_press=self._on_press)
             self._listener.start()
-        except Exception:
+        except Exception as exc:
+            logger.info("Keyboard capture disabled: %s", exc)
+            self._listener = None
             self._platform_capture_supported = False
 
     def stop(self) -> None:
         if self._listener:
-            self._listener.stop()
+            try:
+                self._listener.stop()
+            except Exception:
+                pass
             self._listener = None
 
     def set_paused(self, paused: bool, elapsed_ms: int) -> None:
@@ -131,12 +146,15 @@ class KeyEventCollector:
     def _on_press(self, key: Any) -> None:
         if self._paused:
             return
-        key_text, display_text, is_modifier = normalize_key(key)
-        event = KeyEvent(
-            timestamp_ms=int((monotonic() - self._session_start) * 1000),
-            key_text=key_text,
-            display_text=display_text,
-            is_modifier=is_modifier,
-        )
-        with self._lock:
-            self._events.append(event)
+        try:
+            key_text, display_text, is_modifier = normalize_key(key)
+            event = KeyEvent(
+                timestamp_ms=int((monotonic() - self._session_start) * 1000),
+                key_text=key_text,
+                display_text=display_text,
+                is_modifier=is_modifier,
+            )
+            with self._lock:
+                self._events.append(event)
+        except Exception:
+            pass
