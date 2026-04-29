@@ -86,6 +86,7 @@ from screen_record.render.ffmpeg_renderer import render_final_video
 from screen_record.render.timeline import build_timeline_payload, coerce_segments, load_timeline, write_timeline
 from screen_record.runtime import asset_path
 from screen_record.settings import SettingsStore, resolve_ffmpeg_path
+from screen_record.ui.global_hotkeys import GlobalHotkeyManager
 from screen_record.ui.main_window import RecorderWindow
 from screen_record.ui.region_selector import RegionSelector
 
@@ -394,14 +395,47 @@ class ScreenRecordApplication(QObject):
         self.selector = RegionSelector()
         self._selected_region: CaptureRegion | None = None
 
-        # System tray for notifications when the window is hidden
+        # System tray
         self._tray = QSystemTrayIcon(self)
         icon_file = asset_path("captokey.png")
         if icon_file.exists():
             self._tray.setIcon(QIcon(str(icon_file)))
         else:
             self._tray.setIcon(app.windowIcon())
+
+        # Tray context menu
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
+        self._tray_menu = QMenu()
+        self._action_record = QAction("Record", self)
+        self._action_pause = QAction("Pause", self)
+        self._action_stop = QAction("Stop", self)
+        self._action_show = QAction("Show CaptoKey", self)
+        self._action_quit = QAction("Quit", self)
+        self._action_record.triggered.connect(self._start_recording)
+        self._action_pause.triggered.connect(self.controller.toggle_pause)
+        self._action_stop.triggered.connect(self._stop_recording)
+        self._action_show.triggered.connect(self._show_window)
+        self._action_quit.triggered.connect(app.quit)
+        self._tray_menu.addAction(self._action_record)
+        self._tray_menu.addAction(self._action_pause)
+        self._tray_menu.addAction(self._action_stop)
+        self._tray_menu.addSeparator()
+        self._tray_menu.addAction(self._action_show)
+        self._tray_menu.addAction(self._action_quit)
+        self._tray.setContextMenu(self._tray_menu)
+        self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
+
+        # Global hotkeys (daemon thread) — disabled on macOS (pynput crash)
+        gh_shortcuts = {
+            "record": "<ctrl>+<alt>+j",
+            "pause": "<ctrl>+<alt>+k",
+            "stop": "<ctrl>+<alt>+l",
+        }
+        self._global_hotkeys = GlobalHotkeyManager(gh_shortcuts, self)
+        self._global_hotkeys.triggered.connect(self._on_global_hotkey)
+        self._global_hotkeys.start()
 
         self.window.startRequested.connect(self._start_recording)
         self.window.stopRequested.connect(self._stop_recording)
@@ -467,11 +501,41 @@ class ScreenRecordApplication(QObject):
             self.window.show_error(str(exc))
             return
 
+    def _show_window(self) -> None:
+        self.window.showNormal()
+        self.window.raise_()
+        self.window.activateWindow()
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._show_window()
+
+    def _on_global_hotkey(self, name: str) -> None:
+        if name == "record" and not self.controller._snapshot.active:
+            self._start_recording()
+        elif name == "pause" and self.controller._snapshot.active:
+            self.controller.toggle_pause()
+        elif name == "stop" and self.controller._snapshot.active:
+            self._stop_recording()
+
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         self.window.set_recording_state(active, paused)
         self.window.showNormal()
         self.window.raise_()
         self.window.activateWindow()
+
+        # Update tray menu enabled states
+        self._action_record.setEnabled(not active)
+        self._action_pause.setEnabled(active)
+        self._action_stop.setEnabled(active)
+
+        # Tray notification
+        if active and not paused:
+            self._tray.showMessage("CaptoKey", "Recording started", QSystemTrayIcon.MessageIcon.Information, 2000)
+        elif active and paused:
+            self._tray.showMessage("CaptoKey", "Recording paused", QSystemTrayIcon.MessageIcon.Information, 2000)
+        elif not active:
+            self._tray.showMessage("CaptoKey", "Recording stopped", QSystemTrayIcon.MessageIcon.Information, 2000)
 
     def _open_settings(self) -> None:
         updated = self.window.prompt_settings(self.settings)

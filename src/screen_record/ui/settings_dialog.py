@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import platform
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -11,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -163,6 +166,13 @@ class SettingsDialog(QDialog):
         section_layout.addLayout(make_field("FFmpeg Path", "Path to the FFmpeg executable.", self.ffmpeg_edit))
         container_layout.addWidget(section)
 
+        # ── Permissions reset (macOS only) ──
+        if platform.system() == "Darwin":
+            reset_btn = QPushButton("Reset Screen Recording Permission")
+            reset_btn.setObjectName("resetPermissionBtn")
+            reset_btn.clicked.connect(self._reset_macos_permission)
+            container_layout.addWidget(reset_btn)
+
         container_layout.addStretch(1)
 
         buttons = QHBoxLayout()
@@ -187,6 +197,30 @@ class SettingsDialog(QDialog):
 
     def _show_capture_menu(self) -> None:
         self._capture_menu.setMinimumWidth(self.capture_mode_frame.width())
+
+    def _reset_macos_permission(self) -> None:
+        try:
+            subprocess.run(
+                ["tccutil", "reset", "ScreenCapture", "com.kilo.captokey"],
+                check=True,
+                capture_output=True,
+            )
+            QMessageBox.information(
+                self,
+                "Permission Reset",
+                "Screen Recording permission has been reset.\n\n"
+                "Please restart CaptoKey. The system will ask for permission again on the next recording.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Reset Failed",
+                f"Could not reset permission automatically.\n\n"
+                f"Please do it manually:\n"
+                f"System Settings → Privacy & Security → Screen Recording\n"
+                f"Remove CaptoKey from the list.\n\n"
+                f"Error: {exc}",
+            )
         self._capture_menu.popup(self.capture_mode_frame.mapToGlobal(self.capture_mode_frame.rect().bottomLeft()))
 
     def _fps_step_up(self) -> None:
@@ -418,5 +452,19 @@ QPushButton#secondaryButton:hover {
     background: #2A3140;
     color: #F8FAFC;
     border-color: #3A4258;
+}
+QPushButton#resetPermissionBtn {
+    background: transparent;
+    border: 1px solid #4A5060;
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: #9AA4B2;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#resetPermissionBtn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: #6B7280;
+    color: #F8FAFC;
 }
 """

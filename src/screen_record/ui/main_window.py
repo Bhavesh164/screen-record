@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
@@ -17,6 +18,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+def _platform_shortcuts() -> tuple[QKeySequence, QKeySequence, QKeySequence]:
+    """Return (record, pause, stop) key sequences."""
+    return (
+        QKeySequence("Ctrl+Alt+J"),
+        QKeySequence("Ctrl+Alt+K"),
+        QKeySequence("Ctrl+Alt+L"),
+    )
 
 from screen_record.models import AppSettings, CaptureRegion
 from screen_record.ui.settings_dialog import SettingsDialog
@@ -237,9 +247,7 @@ class RecorderWindow(QMainWindow):
         layout.addLayout(controls)
 
         # ── Shortcut hint ────────────────────────────────────────
-        _seq_start = QKeySequence("Ctrl+Alt+J")
-        _seq_pause = QKeySequence("Ctrl+Alt+K")
-        _seq_stop = QKeySequence("Ctrl+Alt+L")
+        _seq_start, _seq_pause, _seq_stop = _platform_shortcuts()
         hint = QLabel(
             f"{_seq_start.toString()}: Record  ·  "
             f"{_seq_pause.toString()}: Pause  ·  "
@@ -249,7 +257,7 @@ class RecorderWindow(QMainWindow):
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)
 
-        # ── Keyboard shortcuts (Cmd+Option on macOS) ─────────────
+        # ── Keyboard shortcuts ───────────────────────────────────
         self._shortcut_start = QShortcut(_seq_start, self)
         self._shortcut_start.activated.connect(self._on_record_clicked)
         self._shortcut_pause = QShortcut(_seq_pause, self)
@@ -347,6 +355,9 @@ class RecorderWindow(QMainWindow):
         self._latest_session_dir = session_dir
         self.showNormal()
         self.raise_()
+        # Temporarily drop stay-on-top so the modal dialog can appear above us
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+        self.show()
         message = QMessageBox(self)
         message.setWindowTitle("Recording saved")
         message.setText(f"Saved recording session to:\n{session_dir}")
@@ -356,6 +367,9 @@ class RecorderWindow(QMainWindow):
         message.addButton(QMessageBox.StandardButton.Close)
         message.exec()
         clicked = message.clickedButton()
+        # Restore stay-on-top
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.show()
         if clicked == open_folder:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(session_dir)))
         elif clicked == open_timeline:
@@ -366,7 +380,11 @@ class RecorderWindow(QMainWindow):
     def show_error(self, message: str) -> None:
         self.showNormal()
         self.raise_()
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+        self.show()
         QMessageBox.critical(self, "CaptoKey", message)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.show()
 
     # ── Private slots ────────────────────────────────────────────
     def _on_record_clicked(self) -> None:
