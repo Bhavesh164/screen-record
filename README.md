@@ -37,6 +37,24 @@ uv run screen-record
 uv run pytest
 ```
 
+## macOS Permissions
+
+CaptoKey requires **Screen Recording** permission on macOS to capture the screen.
+
+**First run:**
+1. Click **Record** in CaptoKey
+2. macOS will show a system dialog asking for permission
+3. Click **Open System Settings** and toggle **CaptoKey** ON
+4. **Quit and reopen CaptoKey** completely — the permission only takes effect after a restart
+
+If you rebuild the app (which changes the binary signature), macOS will invalidate the previous permission. In that case:
+1. Open **System Settings → Privacy & Security → Screen Recording**
+2. **Remove** CaptoKey from the list
+3. **Add it back** and toggle it ON
+4. Restart CaptoKey
+
+You can also reset the permission from within the app: **Settings → Reset Screen Recording Permission**.
+
 ## Build App Bundle
 
 ```bash
