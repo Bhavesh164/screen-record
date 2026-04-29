@@ -109,9 +109,19 @@ class RecorderController(QObject):
                 fps=self.settings.target_fps,
             )
             self._writer.start()
-        except Exception:
+        except Exception as exc:
             self._cleanup_after_failed_start()
-            raise
+            msg = str(exc)
+            if "CGImage is NULL" in msg or "screen capture" in msg.lower():
+                msg = (
+                    "Screen recording permission was denied or is not active.\n\n"
+                    "1. Open System Settings → Privacy & Security → Screen Recording\n"
+                    "2. Make sure CaptoKey is enabled\n"
+                    "3. Restart CaptoKey completely (quit and reopen)\n\n"
+                    "If you just rebuilt the app, macOS may have invalidated the permission. "
+                    "Remove CaptoKey from the list and add it again, then restart."
+                )
+            raise RuntimeError(msg) from exc
 
         with self._snapshot_lock:
             self._snapshot = RecorderSnapshot(active=True, paused=False)

@@ -40,7 +40,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     staging_dir="$(mktemp -d)"
     cp -R "$APP_PATH" "$staging_dir/"
     xattr -cr "$staging_dir/CaptoKey.app"
-    codesign --force --deep --sign - "$staging_dir/CaptoKey.app"
+    codesign --force --deep --sign - --entitlements macos/CaptoKey.entitlements "$staging_dir/CaptoKey.app"
     ln -s /Applications "$staging_dir/Applications"
     hdiutil create \
         -volname "CaptoKey" \

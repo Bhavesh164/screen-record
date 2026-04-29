@@ -230,7 +230,7 @@ class RecorderWindow(QMainWindow):
         self.settings_button.setIcon(_make_tool_icon("⚙"))
         self.settings_button.setText("Settings")
         self.settings_button.setIconSize(QSize(28, 28))
-        self.settings_button.clicked.connect(self.settingsRequested.emit)
+        self.settings_button.clicked.connect(lambda: self.settingsRequested.emit())
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
         controls.addWidget(self.settings_button)

@@ -76,7 +76,7 @@ class SettingsDialog(QDialog):
         self.setModal(True)
         self.setMinimumSize(460, 520)
         self.setMaximumWidth(540)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_start = None
