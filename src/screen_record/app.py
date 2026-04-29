@@ -427,15 +427,8 @@ class ScreenRecordApplication(QObject):
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
 
-        # Global hotkeys (daemon thread) — disabled on macOS (pynput crash)
-        gh_shortcuts = {
-            "record": "<ctrl>+<alt>+j",
-            "pause": "<ctrl>+<alt>+k",
-            "stop": "<ctrl>+<alt>+l",
-        }
-        self._global_hotkeys = GlobalHotkeyManager(gh_shortcuts, self)
-        self._global_hotkeys.triggered.connect(self._on_global_hotkey)
-        self._global_hotkeys.start()
+        # Global hotkeys — disabled for now (macOS crash investigation)
+        self._global_hotkeys = None
 
         self.window.startRequested.connect(self._start_recording)
         self.window.stopRequested.connect(self._stop_recording)
