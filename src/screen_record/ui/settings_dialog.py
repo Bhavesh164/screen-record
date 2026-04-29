@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -13,11 +16,56 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QStyleFactory,
     QVBoxLayout,
     QWidget,
 )
 
 from screen_record.models import AppSettings
+
+
+def _arrow_image_paths() -> dict[str, str]:
+    tmp = tempfile.gettempdir()
+    paths = {
+        "combo_down": os.path.join(tmp, "captokey_combo_down.png"),
+        "spin_up": os.path.join(tmp, "captokey_spin_up.png"),
+        "spin_down": os.path.join(tmp, "captokey_spin_down.png"),
+    }
+
+    # Combo down arrow (10x6)
+    pm = QPixmap(10, 6)
+    pm.fill(QColor("transparent"))
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor("#9AA4B2"))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawPolygon([QPoint(0, 0), QPoint(10, 0), QPoint(5, 6)])
+    p.end()
+    pm.save(paths["combo_down"])
+
+    # Spin up arrow (8x5)
+    pm = QPixmap(8, 5)
+    pm.fill(QColor("transparent"))
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor("#9AA4B2"))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawPolygon([QPoint(4, 0), QPoint(0, 5), QPoint(8, 5)])
+    p.end()
+    pm.save(paths["spin_up"])
+
+    # Spin down arrow (8x5)
+    pm = QPixmap(8, 5)
+    pm.fill(QColor("transparent"))
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QColor("#9AA4B2"))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawPolygon([QPoint(0, 0), QPoint(8, 0), QPoint(4, 5)])
+    p.end()
+    pm.save(paths["spin_down"])
+
+    return paths
 
 
 class SettingsDialog(QDialog):
@@ -40,9 +88,13 @@ class SettingsDialog(QDialog):
         browse_button.setObjectName("browseBtn")
         browse_button.clicked.connect(self._browse_directory)
 
+        fusion_style = QStyleFactory.create("Fusion")
+
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(10, 60)
         self.fps_spin.setValue(settings.target_fps)
+        if fusion_style is not None:
+            self.fps_spin.setStyle(fusion_style)
 
         self.capture_mode_combo = QComboBox()
         self.capture_mode_combo.setObjectName("captureCombo")
@@ -50,6 +102,8 @@ class SettingsDialog(QDialog):
         self.capture_mode_combo.addItem("Select region each time", "region")
         index = self.capture_mode_combo.findData(settings.capture_mode)
         self.capture_mode_combo.setCurrentIndex(max(0, index))
+        if fusion_style is not None:
+            self.capture_mode_combo.setStyle(fusion_style)
 
         self.ffmpeg_edit = QLineEdit(settings.ffmpeg_path)
         self.ffmpeg_edit.setPlaceholderText("Leave empty to auto-detect")
@@ -128,7 +182,13 @@ class SettingsDialog(QDialog):
         container_layout.addLayout(buttons)
 
         outer_layout.addWidget(container)
-        self.setStyleSheet(_SETTINGS_STYLESHEET)
+        arrows = _arrow_image_paths()
+        stylesheet = _SETTINGS_STYLESHEET.format(
+            combo_down=arrows["combo_down"],
+            spin_up=arrows["spin_up"],
+            spin_down=arrows["spin_down"],
+        )
+        self.setStyleSheet(stylesheet)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -250,11 +310,9 @@ QComboBox#captureCombo::drop-down {
     border-bottom-right-radius: 8px;
 }
 QComboBox#captureCombo::down-arrow {
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #9AA4B2;
-    width: 0;
-    height: 0;
+    image: url({combo_down});
+    width: 10px;
+    height: 6px;
 }
 QComboBox#captureCombo QAbstractItemView {
     background: #12151C;
@@ -288,18 +346,14 @@ QSpinBox::down-button {
     border-bottom-right-radius: 8px;
 }
 QSpinBox::up-arrow {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid #9AA4B2;
-    width: 0;
-    height: 0;
+    image: url({spin_up});
+    width: 8px;
+    height: 5px;
 }
 QSpinBox::down-arrow {
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid #9AA4B2;
-    width: 0;
-    height: 0;
+    image: url({spin_down});
+    width: 8px;
+    height: 5px;
 }
 QSpinBox::up-button:hover, QSpinBox::down-button:hover {
     background: #242A38;

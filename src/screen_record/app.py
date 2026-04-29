@@ -83,6 +83,11 @@ class RecorderController(QObject):
             return
 
         try:
+            # Test grab to determine actual capture dimensions (handles Retina displays)
+            test_provider = make_capture_provider(region)
+            test_frame = test_provider.grab()
+            del test_provider
+
             ffmpeg_path = resolve_ffmpeg_path(self.settings.ffmpeg_path)
             self.settings.resolved_save_dir().mkdir(parents=True, exist_ok=True)
             self._session_paths = create_session_paths(self.settings.resolved_save_dir())
@@ -99,8 +104,8 @@ class RecorderController(QObject):
             self._writer = FFmpegVideoWriter(
                 ffmpeg_path=ffmpeg_path,
                 output_path=self._session_paths.source_video,
-                width=region.width,
-                height=region.height,
+                width=test_frame.width,
+                height=test_frame.height,
                 fps=self.settings.target_fps,
             )
             self._writer.start()
@@ -340,16 +345,30 @@ class ScreenRecordApplication(QObject):
         self._poll_timer.timeout.connect(self.controller.poll)
         self._poll_timer.start()
 
+        self._delay_timer = QTimer(self)
+        self._delay_timer.setSingleShot(True)
+        self._delay_timer.timeout.connect(self._do_start_full_display_recording)
+
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
 
     def _start_recording(self) -> None:
         self.window.set_starting_state()
+        self.window.hide()
+        self._app.processEvents()
         if self.settings.capture_mode == "region":
-            self.window.hide()
             self.selector.start()
             return
-        self._begin_recording_with_region(default_region_for_primary_screen())
+        self._delay_timer.start(400)
+
+    def _do_start_full_display_recording(self) -> None:
+        try:
+            region = default_region_for_primary_screen()
+        except Exception as exc:
+            self.window.showNormal()
+            self.window.show_error(str(exc))
+            return
+        self._begin_recording_with_region(region)
 
     def _stop_recording(self) -> None:
         self.controller.stop()
@@ -360,6 +379,7 @@ class ScreenRecordApplication(QObject):
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
         self.window.update_scope(f"{region.width}×{region.height}")
+        self._app.processEvents()
         try:
             self.controller.start(region)
         except Exception as exc:

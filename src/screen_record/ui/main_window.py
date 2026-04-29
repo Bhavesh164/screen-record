@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QBitmap, QBrush, QColor, QDesktopServices, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QBitmap, QBrush, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -119,6 +120,20 @@ class RecordButton(QPushButton):
         painter.end()
 
 
+def _make_tool_icon(text: str, size: int = 28) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(QColor("transparent"))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QColor("#C8CED8"))
+    font = painter.font()
+    font.setPixelSize(size - 2)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class RecorderWindow(QMainWindow):
     startRequested = Signal()
     stopRequested = Signal()
@@ -192,14 +207,29 @@ class RecorderWindow(QMainWindow):
         # ── Bottom controls ──────────────────────────────────────
         controls = QHBoxLayout()
         controls.setSpacing(10)
-        self.pause_button = QPushButton("⏸\nPause")
+        self.pause_button = QToolButton()
         self.pause_button.setObjectName("pauseBtn")
+        self.pause_button.setAutoRaise(False)
+        self.pause_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.pause_button.setIcon(_make_tool_icon("⏸"))
+        self.pause_button.setText("Pause")
+        self.pause_button.setIconSize(QSize(28, 28))
         self.pause_button.clicked.connect(self._on_pause_clicked)
-        self.stop_button = QPushButton("⏹\nStop")
+        self.stop_button = QToolButton()
         self.stop_button.setObjectName("stopBtn")
+        self.stop_button.setAutoRaise(False)
+        self.stop_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.stop_button.setIcon(_make_tool_icon("⏹"))
+        self.stop_button.setText("Stop")
+        self.stop_button.setIconSize(QSize(28, 28))
         self.stop_button.clicked.connect(self._on_stop_clicked)
-        self.settings_button = QPushButton("⚙\nSettings")
+        self.settings_button = QToolButton()
         self.settings_button.setObjectName("settingsBtn")
+        self.settings_button.setAutoRaise(False)
+        self.settings_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.settings_button.setIcon(_make_tool_icon("⚙"))
+        self.settings_button.setText("Settings")
+        self.settings_button.setIconSize(QSize(28, 28))
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         controls.addWidget(self.pause_button)
         controls.addWidget(self.stop_button)
@@ -272,7 +302,8 @@ class RecorderWindow(QMainWindow):
             self.recording_label.setText("Ready to record")
             self.record_button.set_recording(False)
             self._pulse_timer.stop()
-        self.pause_button.setText("▶\nResume" if paused else "⏸\nPause")
+        self.pause_button.setIcon(_make_tool_icon("▶" if paused else "⏸"))
+        self.pause_button.setText("Resume" if paused else "Pause")
         self.record_button.setEnabled(not active)
         self.stop_button.setEnabled(active)
         self.pause_button.setEnabled(active)
@@ -441,39 +472,41 @@ QLabel#statTitle { color: #9AA4B2; font-size: 11px; }
 QLabel#statValue { color: #F8FAFC; font-size: 15px; font-weight: 700; }
 
 /* ── Bottom control buttons ── */
-QPushButton#pauseBtn, QPushButton#stopBtn, QPushButton#settingsBtn {
+QToolButton#pauseBtn, QToolButton#stopBtn, QToolButton#settingsBtn {
     background: #1A1E27;
     border: 1px solid #242A38;
     border-radius: 12px;
-    min-height: 64px;
-    padding: 8px 4px;
+    min-height: 70px;
+    min-width: 80px;
+    padding: 6px 4px;
     font-size: 12px;
     font-weight: 600;
     color: #C8CED8;
 }
-QPushButton#pauseBtn:hover, QPushButton#settingsBtn:hover {
+QToolButton#pauseBtn:hover, QToolButton#settingsBtn:hover {
     background: #242A38;
     border-color: #3A4258;
     color: #F8FAFC;
 }
-QPushButton#pauseBtn:disabled, QPushButton#settingsBtn:disabled {
+QToolButton#pauseBtn:disabled, QToolButton#settingsBtn:disabled {
+    background: #141821;
     color: #4A5060;
     border-color: #1E232D;
 }
 
-QPushButton#stopBtn {
+QToolButton#stopBtn {
     background: #2A1418;
     border-color: #4D2229;
     color: #FF6B6B;
 }
-QPushButton#stopBtn:hover {
+QToolButton#stopBtn:hover {
     background: #3D1C22;
     border-color: #6B3038;
     color: #FF8888;
 }
-QPushButton#stopBtn:disabled {
-    background: #1A1E27;
-    border-color: #242A38;
+QToolButton#stopBtn:disabled {
+    background: #141821;
+    border-color: #1E232D;
     color: #4A5060;
 }
 
