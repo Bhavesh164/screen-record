@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ctypes
+import platform
 import queue
 import sys
 import threading
@@ -11,6 +13,34 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+
+
+def _macos_screen_capture_allowed() -> tuple[bool, str | None]:
+    """Check whether the current process has macOS screen-recording permission.
+
+    Returns (allowed, message).  *message* is non-None when permission is denied
+    and contains instructions for the user.
+    """
+    if platform.system() != "Darwin":
+        return True, None
+    try:
+        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        if not hasattr(cg, "CGPreflightScreenCaptureAccess"):
+            return True, None
+        if cg.CGPreflightScreenCaptureAccess():
+            return True, None
+    except Exception:
+        return True, None
+    return (
+        False,
+        (
+            "CaptoKey needs screen recording permission.\n\n"
+            "1. Open System Settings → Privacy & Security → Screen Recording\n"
+            "2. Make sure CaptoKey is enabled\n"
+            "3. Restart CaptoKey completely (quit and reopen)\n\n"
+            "If you just rebuilt the app, remove CaptoKey from the list and add it again, then restart."
+        ),
+    )
 
 from screen_record.capture.ffmpeg import FFmpegVideoWriter
 from screen_record.capture.keystrokes import KeyEventCollector
@@ -363,6 +393,10 @@ class ScreenRecordApplication(QObject):
         self.window.set_recording_state(active=False, paused=False)
 
     def _start_recording(self) -> None:
+        allowed, msg = _macos_screen_capture_allowed()
+        if not allowed:
+            self.window.show_error(msg)
+            return
         self.window.set_starting_state()
         self.window.hide()
         self._app.processEvents()
@@ -394,6 +428,7 @@ class ScreenRecordApplication(QObject):
             self.controller.start(region)
         except Exception as exc:
             self.window.showNormal()
+            self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
 

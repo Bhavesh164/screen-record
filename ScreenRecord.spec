@@ -78,4 +78,6 @@ if sys.platform == "darwin":
             "NSHighResolutionCapable": True,
             "NSScreenCaptureUsageDescription": "CaptoKey needs screen recording access to capture your screen.",
         },
+        codesign_identity="-",
+        entitlements_file="macos/CaptoKey.entitlements",
     )

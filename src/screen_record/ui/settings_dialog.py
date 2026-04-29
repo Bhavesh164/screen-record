@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -24,50 +21,6 @@ from PySide6.QtWidgets import (
 from screen_record.models import AppSettings
 
 
-def _arrow_image_paths() -> dict[str, str]:
-    tmp = tempfile.gettempdir()
-    paths = {
-        "combo_down": os.path.join(tmp, "captokey_combo_down.png"),
-        "spin_up": os.path.join(tmp, "captokey_spin_up.png"),
-        "spin_down": os.path.join(tmp, "captokey_spin_down.png"),
-    }
-
-    # Combo down arrow (10x6)
-    pm = QPixmap(10, 6)
-    pm.fill(QColor("transparent"))
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#9AA4B2"))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawPolygon([QPoint(0, 0), QPoint(10, 0), QPoint(5, 6)])
-    p.end()
-    pm.save(paths["combo_down"])
-
-    # Spin up arrow (8x5)
-    pm = QPixmap(8, 5)
-    pm.fill(QColor("transparent"))
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#9AA4B2"))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawPolygon([QPoint(4, 0), QPoint(0, 5), QPoint(8, 5)])
-    p.end()
-    pm.save(paths["spin_up"])
-
-    # Spin down arrow (8x5)
-    pm = QPixmap(8, 5)
-    pm.fill(QColor("transparent"))
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#9AA4B2"))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawPolygon([QPoint(0, 0), QPoint(8, 0), QPoint(4, 5)])
-    p.end()
-    pm.save(paths["spin_down"])
-
-    return paths
-
-
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -76,7 +29,7 @@ class SettingsDialog(QDialog):
         self.setModal(True)
         self.setMinimumSize(460, 520)
         self.setMaximumWidth(540)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_start = None
@@ -182,13 +135,7 @@ class SettingsDialog(QDialog):
         container_layout.addLayout(buttons)
 
         outer_layout.addWidget(container)
-        arrows = _arrow_image_paths()
-        stylesheet = _SETTINGS_STYLESHEET.format(
-            combo_down=arrows["combo_down"],
-            spin_up=arrows["spin_up"],
-            spin_down=arrows["spin_down"],
-        )
-        self.setStyleSheet(stylesheet)
+        self.setStyleSheet(_SETTINGS_STYLESHEET)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -309,11 +256,6 @@ QComboBox#captureCombo::drop-down {
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
 }
-QComboBox#captureCombo::down-arrow {
-    image: url({combo_down});
-    width: 10px;
-    height: 6px;
-}
 QComboBox#captureCombo QAbstractItemView {
     background: #12151C;
     border: 1px solid #2A3140;
@@ -344,16 +286,6 @@ QSpinBox::down-button {
     subcontrol-origin: padding;
     subcontrol-position: bottom right;
     border-bottom-right-radius: 8px;
-}
-QSpinBox::up-arrow {
-    image: url({spin_up});
-    width: 8px;
-    height: 5px;
-}
-QSpinBox::down-arrow {
-    image: url({spin_down});
-    width: 8px;
-    height: 5px;
 }
 QSpinBox::up-button:hover, QSpinBox::down-button:hover {
     background: #242A38;
