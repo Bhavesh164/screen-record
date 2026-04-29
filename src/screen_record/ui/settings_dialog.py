@@ -4,16 +4,14 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
-    QSpinBox,
-    QStyleFactory,
     QVBoxLayout,
     QWidget,
 )
@@ -34,6 +32,7 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_start = None
 
+        # ── Save location ──
         self.save_dir_edit = QLineEdit(settings.save_dir)
         self.save_dir_edit.setMinimumWidth(220)
         self.save_dir_edit.setPlaceholderText("Choose a directory...")
@@ -41,26 +40,62 @@ class SettingsDialog(QDialog):
         browse_button.setObjectName("browseBtn")
         browse_button.clicked.connect(self._browse_directory)
 
-        fusion_style = QStyleFactory.create("Fusion")
+        loc_widget = QWidget()
+        loc_layout = QHBoxLayout(loc_widget)
+        loc_layout.setContentsMargins(0, 0, 0, 0)
+        loc_layout.setSpacing(8)
+        loc_layout.addWidget(self.save_dir_edit, 1)
+        loc_layout.addWidget(browse_button)
 
-        self.fps_spin = QSpinBox()
-        self.fps_spin.setRange(10, 60)
-        self.fps_spin.setValue(settings.target_fps)
-        if fusion_style is not None:
-            self.fps_spin.setStyle(fusion_style)
+        # ── Capture mode (custom combo) ──
+        self._capture_mode_value = settings.capture_mode
+        self.capture_mode_btn = QPushButton()
+        self.capture_mode_btn.setObjectName("captureCombo")
+        capture_menu = QMenu(self.capture_mode_btn)
+        capture_menu.setObjectName("captureMenu")
+        capture_menu.addAction("Full display", lambda: self._set_capture_mode("full_display", "Full display"))
+        capture_menu.addAction("Select region each time", lambda: self._set_capture_mode("region", "Select region each time"))
+        self.capture_mode_btn.setMenu(capture_menu)
+        self._set_capture_mode(
+            settings.capture_mode,
+            "Full display" if settings.capture_mode == "full_display" else "Select region each time",
+        )
 
-        self.capture_mode_combo = QComboBox()
-        self.capture_mode_combo.setObjectName("captureCombo")
-        self.capture_mode_combo.addItem("Full display", "full_display")
-        self.capture_mode_combo.addItem("Select region each time", "region")
-        index = self.capture_mode_combo.findData(settings.capture_mode)
-        self.capture_mode_combo.setCurrentIndex(max(0, index))
-        if fusion_style is not None:
-            self.capture_mode_combo.setStyle(fusion_style)
+        # ── Frame rate (custom spin) ──
+        self.fps_value = settings.target_fps
+        self.fps_edit = QLineEdit(str(settings.target_fps))
+        self.fps_edit.setObjectName("fpsEdit")
+        from PySide6.QtGui import QIntValidator
+        self.fps_edit.setValidator(QIntValidator(10, 60))
 
+        fps_up = QPushButton("▲")
+        fps_up.setObjectName("fpsUpBtn")
+        fps_up.setFixedSize(22, 18)
+        fps_up.clicked.connect(self._fps_step_up)
+        fps_down = QPushButton("▼")
+        fps_down.setObjectName("fpsDownBtn")
+        fps_down.setFixedSize(22, 18)
+        fps_down.clicked.connect(self._fps_step_down)
+
+        fps_btn_col = QVBoxLayout()
+        fps_btn_col.setContentsMargins(0, 0, 0, 0)
+        fps_btn_col.setSpacing(0)
+        fps_btn_col.addWidget(fps_up)
+        fps_btn_col.addWidget(fps_down)
+
+        fps_widget = QWidget()
+        fps_widget.setObjectName("fpsWidget")
+        fps_layout = QHBoxLayout(fps_widget)
+        fps_layout.setContentsMargins(0, 0, 0, 0)
+        fps_layout.setSpacing(0)
+        fps_layout.addWidget(self.fps_edit, 1)
+        fps_layout.addLayout(fps_btn_col)
+
+        # ── FFmpeg path ──
         self.ffmpeg_edit = QLineEdit(settings.ffmpeg_path)
         self.ffmpeg_edit.setPlaceholderText("Leave empty to auto-detect")
 
+        # ── Layout ──
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -101,21 +136,14 @@ class SettingsDialog(QDialog):
             vbox.addWidget(widget)
             return vbox
 
-        loc_widget = QWidget()
-        loc_layout = QHBoxLayout(loc_widget)
-        loc_layout.setContentsMargins(0, 0, 0, 0)
-        loc_layout.setSpacing(8)
-        loc_layout.addWidget(self.save_dir_edit, 1)
-        loc_layout.addWidget(browse_button)
-
         section = QFrame()
         section.setObjectName("settingsSection")
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(16, 14, 16, 14)
         section_layout.setSpacing(14)
         section_layout.addLayout(make_field("Save Location", "Choose where recorded videos will be saved.", loc_widget))
-        section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_combo))
-        section_layout.addLayout(make_field("Frame Rate", "Target frames per second for the recording.", self.fps_spin))
+        section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_btn))
+        section_layout.addLayout(make_field("Frame Rate", "Target frames per second for the recording.", fps_widget))
         section_layout.addLayout(make_field("FFmpeg Path", "Path to the FFmpeg executable.", self.ffmpeg_edit))
         container_layout.addWidget(section)
 
@@ -137,6 +165,26 @@ class SettingsDialog(QDialog):
         outer_layout.addWidget(container)
         self.setStyleSheet(_SETTINGS_STYLESHEET)
 
+    def _set_capture_mode(self, value: str, text: str) -> None:
+        self._capture_mode_value = value
+        self.capture_mode_btn.setText(f"{text}  ▼")
+
+    def _fps_step_up(self) -> None:
+        try:
+            v = int(self.fps_edit.text())
+        except ValueError:
+            v = 30
+        v = min(60, v + 1)
+        self.fps_edit.setText(str(v))
+
+    def _fps_step_down(self) -> None:
+        try:
+            v = int(self.fps_edit.text())
+        except ValueError:
+            v = 30
+        v = max(10, v - 1)
+        self.fps_edit.setText(str(v))
+
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -149,10 +197,15 @@ class SettingsDialog(QDialog):
         self._drag_start = None
 
     def to_settings(self) -> AppSettings:
+        try:
+            fps = int(self.fps_edit.text())
+        except ValueError:
+            fps = 30
+        fps = max(10, min(60, fps))
         return AppSettings(
             save_dir=self.save_dir_edit.text().strip() or str(Path.home() / "Downloads"),
-            capture_mode=str(self.capture_mode_combo.currentData()),
-            target_fps=int(self.fps_spin.value()),
+            capture_mode=self._capture_mode_value,
+            target_fps=fps,
             output_container="mp4",
             ffmpeg_path=self.ffmpeg_edit.text().strip(),
         )
@@ -214,7 +267,7 @@ QLabel#fieldDesc {
     color: #6B7280;
     font-size: 11px;
 }
-QLineEdit, QSpinBox {
+QLineEdit {
     background: #0F1219;
     border: 1px solid #2A3140;
     border-radius: 8px;
@@ -224,74 +277,74 @@ QLineEdit, QSpinBox {
     selection-background-color: #A898EA;
     selection-color: #12151C;
 }
-QLineEdit:focus, QSpinBox:focus {
+QLineEdit:focus {
     border-color: #A898EA;
 }
 QLineEdit::placeholder {
     color: #4A5060;
 }
 
-/* ── ComboBox ── */
-QComboBox#captureCombo {
+/* ── Custom combo button ── */
+QPushButton#captureCombo {
     background: #0F1219;
     border: 1px solid #2A3140;
     border-radius: 8px;
     padding: 8px 12px;
-    padding-right: 34px;
     color: #F8FAFC;
     min-height: 22px;
-    selection-background-color: #A898EA;
-    selection-color: #12151C;
+    text-align: left;
+    font-size: 13px;
 }
-QComboBox#captureCombo:focus {
+QPushButton#captureCombo:focus {
     border-color: #A898EA;
 }
-QComboBox#captureCombo::drop-down {
-    subcontrol-origin: padding;
-    subcontrol-position: center right;
-    width: 32px;
-    background: #4A5060;
-    border: none;
-    border-left: 1px solid #5A6374;
-    border-top-right-radius: 8px;
-    border-bottom-right-radius: 8px;
+QPushButton#captureCombo::menu-indicator {
+    image: none;
+    width: 0px;
 }
-QComboBox#captureCombo::drop-down:hover {
-    background: #5A6374;
-}
-QComboBox#captureCombo QAbstractItemView {
+QMenu#captureMenu {
     background: #12151C;
     border: 1px solid #2A3140;
     border-radius: 6px;
     color: #F8FAFC;
-    selection-background-color: #A898EA;
-    selection-color: #12151C;
     padding: 4px;
-    outline: none;
+}
+QMenu#captureMenu::item {
+    padding: 6px 16px;
+    border-radius: 4px;
+}
+QMenu#captureMenu::item:selected {
+    background: #A898EA;
+    color: #12151C;
 }
 
-/* ── SpinBox ── */
-QSpinBox {
-    padding-right: 28px;
+/* ── Custom FPS widget ── */
+QWidget#fpsWidget {
+    background: #0F1219;
+    border: 1px solid #2A3140;
+    border-radius: 8px;
 }
-QSpinBox::up-button, QSpinBox::down-button {
-    background: #4A5060;
+QWidget#fpsWidget:focus-within {
+    border-color: #A898EA;
+}
+QLineEdit#fpsEdit {
+    background: transparent;
     border: none;
-    border-left: 1px solid #5A6374;
-    width: 22px;
+    border-radius: 0;
+    padding: 8px 12px;
+    color: #F8FAFC;
+    min-height: 22px;
+    font-size: 13px;
 }
-QSpinBox::up-button {
-    subcontrol-origin: padding;
-    subcontrol-position: top right;
-    border-top-right-radius: 8px;
+QPushButton#fpsUpBtn, QPushButton#fpsDownBtn {
+    background: #2A3140;
+    border: none;
+    color: #F8FAFC;
+    font-size: 8px;
+    padding: 0;
 }
-QSpinBox::down-button {
-    subcontrol-origin: padding;
-    subcontrol-position: bottom right;
-    border-bottom-right-radius: 8px;
-}
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background: #5A6374;
+QPushButton#fpsUpBtn:hover, QPushButton#fpsDownBtn:hover {
+    background: #3A4258;
 }
 
 /* ── Buttons ── */
