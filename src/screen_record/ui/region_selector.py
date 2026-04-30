@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
@@ -112,14 +114,16 @@ class RecordingOverlay:
 
     def __init__(self) -> None:
         self._borders: list[QWidget] = []
+        self._visible = False
         for _ in range(4):
             w = QWidget()
             w.setWindowFlags(
                 Qt.WindowType.FramelessWindowHint
                 | Qt.WindowType.WindowStaysOnTopHint
-                | Qt.WindowType.Tool
+                | Qt.WindowType.WindowDoesNotAcceptFocus
             )
             w.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+            w.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
             w.setStyleSheet(f"background-color: {self.BORDER_COLOR};")
             w.hide()
             self._borders.append(w)
@@ -136,9 +140,21 @@ class RecordingOverlay:
         self._borders[3].setGeometry(left + width, top, bw, height)
 
     def show(self) -> None:
+        self._visible = True
         for b in self._borders:
             b.show()
+            b.raise_()
+        self._set_mac_window_level()
 
     def hide(self) -> None:
+        self._visible = False
         for b in self._borders:
             b.hide()
+
+    def raise_borders(self) -> None:
+        if self._visible:
+            for b in self._borders:
+                b.raise_()
+
+    def _set_mac_window_level(self) -> None:
+        pass

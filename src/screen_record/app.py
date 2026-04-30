@@ -455,6 +455,10 @@ class ScreenRecordApplication(QObject):
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._do_start_full_display_recording)
 
+        self._overlay_keep_on_top_timer = QTimer(self)
+        self._overlay_keep_on_top_timer.setInterval(500)
+        self._overlay_keep_on_top_timer.timeout.connect(self.overlay.raise_borders)
+
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
 
@@ -498,11 +502,13 @@ class ScreenRecordApplication(QObject):
             self.controller.start(region)
         except Exception as exc:
             self.overlay.hide()
+            self._overlay_keep_on_top_timer.stop()
             self.window.showNormal()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
         self.overlay.show()
+        self._overlay_keep_on_top_timer.start()
 
     def _show_window(self) -> None:
         self.window.showNormal()
@@ -524,6 +530,7 @@ class ScreenRecordApplication(QObject):
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         if not active:
             self.overlay.hide()
+            self._overlay_keep_on_top_timer.stop()
         self.window.set_recording_state(active, paused)
         self.window.showNormal()
         self.window.raise_()
