@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import platform
-import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -13,7 +11,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -28,10 +25,9 @@ class SettingsDialog(QDialog):
         self.setObjectName("settingsDialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(460, 520)
+        self.setMinimumSize(460, 340)
         self.setMaximumWidth(540)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_start = None
 
@@ -54,9 +50,11 @@ class SettingsDialog(QDialog):
         self._capture_mode_value = settings.capture_mode
         self.capture_mode_text = QLabel("Full display")
         self.capture_mode_text.setObjectName("captureComboText")
+        self.capture_mode_text.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         capture_arrow = QLabel("▼")
         capture_arrow.setObjectName("captureComboArrow")
         capture_arrow.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        capture_arrow.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         capture_inner = QHBoxLayout()
         capture_inner.setContentsMargins(12, 8, 12, 8)
@@ -79,40 +77,6 @@ class SettingsDialog(QDialog):
             settings.capture_mode,
             "Full display" if settings.capture_mode == "full_display" else "Select region each time",
         )
-
-        # ── Frame rate (custom spin) ──
-        self.fps_value = settings.target_fps
-        self.fps_edit = QLineEdit(str(settings.target_fps))
-        self.fps_edit.setObjectName("fpsEdit")
-        from PySide6.QtGui import QIntValidator
-        self.fps_edit.setValidator(QIntValidator(10, 60))
-
-        fps_up = QPushButton("▲")
-        fps_up.setObjectName("fpsUpBtn")
-        fps_up.setFixedSize(22, 18)
-        fps_up.clicked.connect(self._fps_step_up)
-        fps_down = QPushButton("▼")
-        fps_down.setObjectName("fpsDownBtn")
-        fps_down.setFixedSize(22, 18)
-        fps_down.clicked.connect(self._fps_step_down)
-
-        fps_btn_col = QVBoxLayout()
-        fps_btn_col.setContentsMargins(0, 0, 0, 0)
-        fps_btn_col.setSpacing(0)
-        fps_btn_col.addWidget(fps_up)
-        fps_btn_col.addWidget(fps_down)
-
-        fps_widget = QWidget()
-        fps_widget.setObjectName("fpsWidget")
-        fps_layout = QHBoxLayout(fps_widget)
-        fps_layout.setContentsMargins(0, 0, 0, 0)
-        fps_layout.setSpacing(0)
-        fps_layout.addWidget(self.fps_edit, 1)
-        fps_layout.addLayout(fps_btn_col)
-
-        # ── FFmpeg path ──
-        self.ffmpeg_edit = QLineEdit(settings.ffmpeg_path)
-        self.ffmpeg_edit.setPlaceholderText("Leave empty to auto-detect")
 
         # ── Layout ──
         outer_layout = QVBoxLayout(self)
@@ -162,16 +126,7 @@ class SettingsDialog(QDialog):
         section_layout.setSpacing(14)
         section_layout.addLayout(make_field("Save Location", "Choose where recorded videos will be saved.", loc_widget))
         section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_frame))
-        section_layout.addLayout(make_field("Frame Rate", "Target frames per second for the recording.", fps_widget))
-        section_layout.addLayout(make_field("FFmpeg Path", "Path to the FFmpeg executable.", self.ffmpeg_edit))
         container_layout.addWidget(section)
-
-        # ── Permissions reset (macOS only) ──
-        if platform.system() == "Darwin":
-            reset_btn = QPushButton("Reset Screen Recording Permission")
-            reset_btn.setObjectName("resetPermissionBtn")
-            reset_btn.clicked.connect(self._reset_macos_permission)
-            container_layout.addWidget(reset_btn)
 
         container_layout.addStretch(1)
 
@@ -197,47 +152,9 @@ class SettingsDialog(QDialog):
 
     def _show_capture_menu(self) -> None:
         self._capture_menu.setMinimumWidth(self.capture_mode_frame.width())
-
-    def _reset_macos_permission(self) -> None:
-        try:
-            subprocess.run(
-                ["tccutil", "reset", "ScreenCapture", "com.kilo.captokey"],
-                check=True,
-                capture_output=True,
-            )
-            QMessageBox.information(
-                self,
-                "Permission Reset",
-                "Screen Recording permission has been reset.\n\n"
-                "Please restart CaptoKey. The system will ask for permission again on the next recording.",
-            )
-        except Exception as exc:
-            QMessageBox.critical(
-                self,
-                "Reset Failed",
-                f"Could not reset permission automatically.\n\n"
-                f"Please do it manually:\n"
-                f"System Settings → Privacy & Security → Screen Recording\n"
-                f"Remove CaptoKey from the list.\n\n"
-                f"Error: {exc}",
-            )
-        self._capture_menu.popup(self.capture_mode_frame.mapToGlobal(self.capture_mode_frame.rect().bottomLeft()))
-
-    def _fps_step_up(self) -> None:
-        try:
-            v = int(self.fps_edit.text())
-        except ValueError:
-            v = 30
-        v = min(60, v + 1)
-        self.fps_edit.setText(str(v))
-
-    def _fps_step_down(self) -> None:
-        try:
-            v = int(self.fps_edit.text())
-        except ValueError:
-            v = 30
-        v = max(10, v - 1)
-        self.fps_edit.setText(str(v))
+        self._capture_menu.popup(
+            self.capture_mode_frame.mapToGlobal(self.capture_mode_frame.rect().bottomLeft())
+        )
 
     def eventFilter(self, watched, event) -> bool:  # type: ignore[override]
         if watched is self.capture_mode_frame and event.type() == event.Type.MouseButtonRelease:
@@ -257,17 +174,12 @@ class SettingsDialog(QDialog):
         self._drag_start = None
 
     def to_settings(self) -> AppSettings:
-        try:
-            fps = int(self.fps_edit.text())
-        except ValueError:
-            fps = 30
-        fps = max(10, min(60, fps))
         return AppSettings(
             save_dir=self.save_dir_edit.text().strip() or str(Path.home() / "Downloads"),
             capture_mode=self._capture_mode_value,
-            target_fps=fps,
+            target_fps=30,
             output_container="mp4",
-            ffmpeg_path=self.ffmpeg_edit.text().strip(),
+            ffmpeg_path="",
         )
 
     def _browse_directory(self) -> None:
@@ -382,35 +294,6 @@ QMenu#captureMenu::item:selected {
     color: #12151C;
 }
 
-/* ── Custom FPS widget ── */
-QWidget#fpsWidget {
-    background: #0F1219;
-    border: 1px solid #2A3140;
-    border-radius: 8px;
-}
-QWidget#fpsWidget:focus-within {
-    border-color: #A898EA;
-}
-QLineEdit#fpsEdit {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 8px 12px;
-    color: #F8FAFC;
-    min-height: 22px;
-    font-size: 13px;
-}
-QPushButton#fpsUpBtn, QPushButton#fpsDownBtn {
-    background: #2A3140;
-    border: none;
-    color: #F8FAFC;
-    font-size: 8px;
-    padding: 0;
-}
-QPushButton#fpsUpBtn:hover, QPushButton#fpsDownBtn:hover {
-    background: #3A4258;
-}
-
 /* ── Buttons ── */
 QPushButton#browseBtn {
     background: #1E232D;
@@ -452,19 +335,5 @@ QPushButton#secondaryButton:hover {
     background: #2A3140;
     color: #F8FAFC;
     border-color: #3A4258;
-}
-QPushButton#resetPermissionBtn {
-    background: transparent;
-    border: 1px solid #4A5060;
-    border-radius: 8px;
-    padding: 8px 16px;
-    color: #9AA4B2;
-    font-size: 12px;
-    font-weight: 600;
-}
-QPushButton#resetPermissionBtn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: #6B7280;
-    color: #F8FAFC;
 }
 """
