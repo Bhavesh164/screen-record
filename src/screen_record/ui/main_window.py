@@ -8,7 +8,6 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QBitmap, QBrush, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -41,34 +40,6 @@ def _platform_shortcuts() -> tuple[QKeySequence, QKeySequence, QKeySequence]:
 
 from screen_record.models import AppSettings, CaptureRegion
 from screen_record.ui.settings_dialog import SettingsDialog
-
-
-class StatCard(QFrame):
-    def __init__(self, title: str, value: str, icon: str) -> None:
-        super().__init__()
-        self.setObjectName("statCard")
-        icon_label = QLabel(icon)
-        icon_label.setObjectName("statIcon")
-        self.title_label = QLabel(title)
-        self.value_label = QLabel(value)
-        self.title_label.setObjectName("statTitle")
-        self.value_label.setObjectName("statValue")
-
-        top_layout = QHBoxLayout()
-        top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.setSpacing(6)
-        top_layout.addWidget(icon_label)
-        top_layout.addWidget(self.title_label)
-        top_layout.addStretch()
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(4)
-        layout.addLayout(top_layout)
-        layout.addWidget(self.value_label)
-
-    def set_value(self, value: str) -> None:
-        self.value_label.setText(value)
 
 
 class RecordButton(QPushButton):
@@ -210,15 +181,6 @@ class RecorderWindow(QMainWindow):
         record_shell.addWidget(self.scope_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addLayout(record_shell)
 
-        # ── Stat cards ───────────────────────────────────────────
-        stats = QGridLayout()
-        stats.setSpacing(10)
-        self.storage_card = StatCard("Storage", "0 MB", "⛁")
-        self.key_card = StatCard("Keystrokes", "0", "⌨")
-        stats.addWidget(self.storage_card, 0, 0)
-        stats.addWidget(self.key_card, 0, 1)
-        layout.addLayout(stats)
-
         # ── Divider ──────────────────────────────────────────────
         divider = QFrame()
         divider.setObjectName("divider")
@@ -346,8 +308,6 @@ class RecorderWindow(QMainWindow):
 
     def update_metrics(self, elapsed_ms: int, file_size_bytes: int, keystrokes: int) -> None:
         self.timer_label.setText(_format_ms(elapsed_ms))
-        self.storage_card.set_value(_format_megabytes(file_size_bytes))
-        self.key_card.set_value(f"{keystrokes:,}")
 
     def update_scope(self, text: str) -> None:
         self.scope_label.setText(text)
@@ -415,13 +375,6 @@ def _format_ms(value: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def _format_megabytes(value: int) -> str:
-    megabytes = value / (1024 * 1024)
-    if megabytes >= 10 or megabytes.is_integer():
-        return f"{megabytes:.0f} MB"
-    return f"{megabytes:.1f} MB"
-
-
 # ── Stylesheet ───────────────────────────────────────────────────
 _MAIN_STYLESHEET = """
 QMainWindow {
@@ -487,21 +440,6 @@ QLabel#scopeLabel {
     color: #9AA4B2;
     font-size: 11px;
 }
-
-/* ── Stat cards ── */
-QFrame#statCard {
-    background: #171B24;
-    border: 1px solid #1E232D;
-    border-radius: 8px;
-}
-QFrame#divider {
-    background: #1E232D;
-    border: none;
-    border-radius: 0;
-}
-QLabel#statIcon { color: #9AA4B2; font-size: 14px; }
-QLabel#statTitle { color: #9AA4B2; font-size: 11px; }
-QLabel#statValue { color: #F8FAFC; font-size: 15px; font-weight: 700; }
 
 /* ── Bottom control buttons ── */
 QToolButton#pauseBtn, QToolButton#stopBtn, QToolButton#settingsBtn {
