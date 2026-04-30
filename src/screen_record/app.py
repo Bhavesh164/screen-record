@@ -88,7 +88,7 @@ from screen_record.runtime import asset_path
 from screen_record.settings import SettingsStore, resolve_ffmpeg_path
 from screen_record.ui.global_hotkeys import GlobalHotkeyManager
 from screen_record.ui.main_window import RecorderWindow
-from screen_record.ui.region_selector import RegionSelector
+from screen_record.ui.region_selector import RegionSelector, RecordingOverlay
 
 
 class SessionClock:
@@ -371,12 +371,15 @@ class RecorderController(QObject):
         )
         payload["stats"]["dropped_frames"] = self._dropped_frames
         write_timeline(self._session_paths.timeline_file, payload)
+        # Ensure even dimensions for libx264
+        render_w = self._active_region.width if self._active_region.width % 2 == 0 else self._active_region.width + 1
+        render_h = self._active_region.height if self._active_region.height % 2 == 0 else self._active_region.height + 1
         render_final_video(
             ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
             source_video=self._session_paths.source_video,
             final_video=self._session_paths.final_video,
-            width=self._active_region.width,
-            height=self._active_region.height,
+            width=render_w,
+            height=render_h,
             style=payload.get("style", {}),
             segments=coerce_segments(payload),
             work_dir=self._session_paths.directory,
@@ -393,6 +396,7 @@ class ScreenRecordApplication(QObject):
         self.controller = RecorderController(self.settings)
         self.window = RecorderWindow(self.settings)
         self.selector = RegionSelector()
+        self.overlay = RecordingOverlay()
         self._selected_region: CaptureRegion | None = None
 
         # System tray
@@ -451,6 +455,10 @@ class ScreenRecordApplication(QObject):
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._do_start_full_display_recording)
 
+        self._overlay_keep_on_top_timer = QTimer(self)
+        self._overlay_keep_on_top_timer.setInterval(500)
+        self._overlay_keep_on_top_timer.timeout.connect(self.overlay.raise_borders)
+
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
 
@@ -463,6 +471,9 @@ class ScreenRecordApplication(QObject):
         self.window.hide()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
+            screen = self._app.primaryScreen()
+            if screen:
+                self.selector.set_background(screen.grabWindow(0))
             self.selector.start()
             return
         self._delay_timer.start(400)
@@ -484,15 +495,20 @@ class ScreenRecordApplication(QObject):
 
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
+        self.overlay.set_region(region)
         self.window.update_scope(f"{region.width}×{region.height}")
         self._app.processEvents()
         try:
             self.controller.start(region)
         except Exception as exc:
+            self.overlay.hide()
+            self._overlay_keep_on_top_timer.stop()
             self.window.showNormal()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
+        self.overlay.show()
+        self._overlay_keep_on_top_timer.start()
 
     def _show_window(self) -> None:
         self.window.showNormal()
@@ -512,6 +528,9 @@ class ScreenRecordApplication(QObject):
             self._stop_recording()
 
     def _on_state_changed(self, active: bool, paused: bool) -> None:
+        if not active:
+            self.overlay.hide()
+            self._overlay_keep_on_top_timer.stop()
         self.window.set_recording_state(active, paused)
         self.window.showNormal()
         self.window.raise_()

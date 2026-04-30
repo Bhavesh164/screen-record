@@ -15,6 +15,9 @@ class FFmpegVideoWriter:
     _process: subprocess.Popen[bytes] | None = None
 
     def start(self) -> None:
+        # Ensure dimensions are even (libx264 requirement)
+        w = self.width if self.width % 2 == 0 else self.width + 1
+        h = self.height if self.height % 2 == 0 else self.height + 1
         command = [
             self.ffmpeg_path,
             "-y",
@@ -30,6 +33,8 @@ class FFmpegVideoWriter:
             str(self.fps),
             "-i",
             "-",
+            "-vf",
+            f"pad={w}:{h}:0:0:black",
             "-an",
             "-c:v",
             "libx264",
