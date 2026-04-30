@@ -88,7 +88,7 @@ from screen_record.runtime import asset_path
 from screen_record.settings import SettingsStore, resolve_ffmpeg_path
 from screen_record.ui.global_hotkeys import GlobalHotkeyManager
 from screen_record.ui.main_window import RecorderWindow
-from screen_record.ui.region_selector import RegionSelector
+from screen_record.ui.region_selector import RegionSelector, RecordingOverlay
 
 
 class SessionClock:
@@ -396,6 +396,7 @@ class ScreenRecordApplication(QObject):
         self.controller = RecorderController(self.settings)
         self.window = RecorderWindow(self.settings)
         self.selector = RegionSelector()
+        self.overlay = RecordingOverlay()
         self._selected_region: CaptureRegion | None = None
 
         # System tray
@@ -466,6 +467,9 @@ class ScreenRecordApplication(QObject):
         self.window.hide()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
+            screen = self._app.primaryScreen()
+            if screen:
+                self.selector.set_background(screen.grabWindow(0))
             self.selector.start()
             return
         self._delay_timer.start(400)
@@ -487,15 +491,18 @@ class ScreenRecordApplication(QObject):
 
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
+        self.overlay.set_region(region)
         self.window.update_scope(f"{region.width}×{region.height}")
         self._app.processEvents()
         try:
             self.controller.start(region)
         except Exception as exc:
+            self.overlay.hide()
             self.window.showNormal()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
+        self.overlay.show()
 
     def _show_window(self) -> None:
         self.window.showNormal()
@@ -515,6 +522,8 @@ class ScreenRecordApplication(QObject):
             self._stop_recording()
 
     def _on_state_changed(self, active: bool, paused: bool) -> None:
+        if not active:
+            self.overlay.hide()
         self.window.set_recording_state(active, paused)
         self.window.showNormal()
         self.window.raise_()
