@@ -64,12 +64,19 @@ class RegionSelector(QWidget):
             if selection.width() < 8 or selection.height() < 8:
                 self.selectionCancelled.emit()
                 return
+            # libx264 requires width and height divisible by 2
+            w = selection.width()
+            h = selection.height()
+            if w % 2 != 0:
+                w += 1
+            if h % 2 != 0:
+                h += 1
             self.regionSelected.emit(
                 CaptureRegion(
                     left=selection.left(),
                     top=selection.top(),
-                    width=selection.width(),
-                    height=selection.height(),
+                    width=w,
+                    height=h,
                 )
             )
 

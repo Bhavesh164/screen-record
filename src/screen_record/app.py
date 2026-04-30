@@ -371,12 +371,15 @@ class RecorderController(QObject):
         )
         payload["stats"]["dropped_frames"] = self._dropped_frames
         write_timeline(self._session_paths.timeline_file, payload)
+        # Ensure even dimensions for libx264
+        render_w = self._active_region.width if self._active_region.width % 2 == 0 else self._active_region.width + 1
+        render_h = self._active_region.height if self._active_region.height % 2 == 0 else self._active_region.height + 1
         render_final_video(
             ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
             source_video=self._session_paths.source_video,
             final_video=self._session_paths.final_video,
-            width=self._active_region.width,
-            height=self._active_region.height,
+            width=render_w,
+            height=render_h,
             style=payload.get("style", {}),
             segments=coerce_segments(payload),
             work_dir=self._session_paths.directory,
