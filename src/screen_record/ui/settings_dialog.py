@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -126,6 +127,12 @@ class SettingsDialog(QDialog):
         section_layout.setSpacing(14)
         section_layout.addLayout(make_field("Save Location", "Choose where recorded videos will be saved.", loc_widget))
         section_layout.addLayout(make_field("Capture Mode", "Select how the screen is captured.", self.capture_mode_frame))
+        
+        self.keystrokes_checkbox = QCheckBox("Enable keystroke capture")
+        self.keystrokes_checkbox.setObjectName("settingsCheckbox")
+        self.keystrokes_checkbox.setChecked(settings.capture_keystrokes)
+        section_layout.addLayout(make_field("Keystrokes", "Record and display keyboard presses in the video timeline.", self.keystrokes_checkbox))
+
         container_layout.addWidget(section)
 
         container_layout.addStretch(1)
@@ -180,6 +187,7 @@ class SettingsDialog(QDialog):
             target_fps=30,
             output_container="mp4",
             ffmpeg_path="",
+            capture_keystrokes=self.keystrokes_checkbox.isChecked(),
         )
 
     def _browse_directory(self) -> None:
@@ -254,6 +262,10 @@ QLineEdit:focus {
 }
 QLineEdit::placeholder {
     color: #4A5060;
+}
+QCheckBox#settingsCheckbox {
+    color: #F8FAFC;
+    font-size: 13px;
 }
 
 /* ── Custom combo frame ── */

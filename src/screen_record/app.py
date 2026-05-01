@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import ctypes
 import platform
 import queue
@@ -10,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -91,6 +92,16 @@ from screen_record.ui.main_window import RecorderWindow
 from screen_record.ui.region_selector import RegionSelector, RecordingOverlay
 
 
+def _macos_activate_app() -> None:
+    if platform.system() != "Darwin":
+        return
+    try:
+        import AppKit
+        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
+
 class SessionClock:
     def __init__(self) -> None:
         self._started = time.monotonic()
@@ -161,7 +172,8 @@ class RecorderController(QObject):
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=3)
             self._collector = KeyEventCollector()
-            self._collector.start()
+            if self.settings.capture_keystrokes:
+                self._collector.start()
             self._clock = SessionClock()
             self._started_at = datetime.now()
             self._dropped_frames = 0
@@ -354,6 +366,7 @@ class RecorderController(QObject):
 
         elapsed_ms = self._clock.elapsed_ms()
         events = self._collector.snapshot()
+        logging.info("Finalizing session: %d keystroke events captured", len(events))
         session = SessionMetadata.build(
             duration_ms=elapsed_ms,
             fps=self.settings.target_fps,
@@ -384,6 +397,11 @@ class RecorderController(QObject):
             segments=coerce_segments(payload),
             work_dir=self._session_paths.directory,
         )
+        try:
+            if self._session_paths.source_video.exists():
+                self._session_paths.source_video.unlink()
+        except OSError:
+            pass
         self.sessionSaved.emit(str(self._session_paths.directory))
 
 
@@ -398,6 +416,8 @@ class ScreenRecordApplication(QObject):
         self.selector = RegionSelector()
         self.overlay = RecordingOverlay()
         self._selected_region: CaptureRegion | None = None
+
+        self._app.installEventFilter(self)
 
         # System tray
         self._tray = QSystemTrayIcon(self)
@@ -440,11 +460,11 @@ class ScreenRecordApplication(QObject):
         self.window.settingsRequested.connect(self._open_settings)
         self.window.renderAgainRequested.connect(self.controller.rerender)
         self.controller.statsUpdated.connect(self.window.update_metrics)
-        self.controller.stateChanged.connect(self._on_state_changed)
-        self.controller.errorRaised.connect(self.window.show_error)
-        self.controller.sessionSaved.connect(self._handle_saved_session)
+        self.controller.stateChanged.connect(self._on_state_changed, Qt.ConnectionType.QueuedConnection)
+        self.controller.errorRaised.connect(self.window.show_error, Qt.ConnectionType.QueuedConnection)
+        self.controller.sessionSaved.connect(self._handle_saved_session, Qt.ConnectionType.QueuedConnection)
         self.selector.regionSelected.connect(self._begin_recording_with_region)
-        self.selector.selectionCancelled.connect(self.window.showNormal)
+        self.selector.selectionCancelled.connect(self._cancel_recording)
 
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(250)
@@ -455,12 +475,19 @@ class ScreenRecordApplication(QObject):
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._do_start_full_display_recording)
 
-        self._overlay_keep_on_top_timer = QTimer(self)
-        self._overlay_keep_on_top_timer.setInterval(500)
-        self._overlay_keep_on_top_timer.timeout.connect(self.overlay.raise_borders)
+        self._keystroke_diagnostic_timer = QTimer(self)
+        self._keystroke_diagnostic_timer.setSingleShot(True)
+        self._keystroke_diagnostic_timer.setInterval(5000)
+        self._keystroke_diagnostic_timer.timeout.connect(self._check_keystroke_capture)
 
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.ApplicationActivate:
+            if time.monotonic() - getattr(self, "_last_hide_time", 0) > 1.0:
+                self._show_window()
+        return super().eventFilter(obj, event)
 
     def _start_recording(self) -> None:
         allowed, msg = _macos_ensure_screen_capture()
@@ -469,6 +496,7 @@ class ScreenRecordApplication(QObject):
             return
         self.window.set_starting_state()
         self.window.hide()
+        self._last_hide_time = time.monotonic()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
             screen = self._app.primaryScreen()
@@ -482,16 +510,25 @@ class ScreenRecordApplication(QObject):
         try:
             region = default_region_for_primary_screen()
         except Exception as exc:
-            self.window.showNormal()
+            self.window.show()
             self.window.show_error(str(exc))
             return
         self._begin_recording_with_region(region)
 
     def _stop_recording(self) -> None:
-        self.controller.stop()
-        # Restore the window immediately so the user sees the completion dialog
-        self.window.showNormal()
+        self.window.set_processing_state()
+        self.window.show()
         self.window.raise_()
+        self.window.activateWindow()
+        _macos_activate_app()
+        self.controller.stop()
+
+    def _cancel_recording(self) -> None:
+        self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
+        _macos_activate_app()
+        self.window.set_recording_state(False, False)
 
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
@@ -502,18 +539,19 @@ class ScreenRecordApplication(QObject):
             self.controller.start(region)
         except Exception as exc:
             self.overlay.hide()
-            self._overlay_keep_on_top_timer.stop()
-            self.window.showNormal()
+            self.window.show()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
         self.overlay.show()
-        self._overlay_keep_on_top_timer.start()
 
     def _show_window(self) -> None:
-        self.window.showNormal()
+        if not (self.window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint):
+            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+        _macos_activate_app()
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -530,11 +568,22 @@ class ScreenRecordApplication(QObject):
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         if not active:
             self.overlay.hide()
-            self._overlay_keep_on_top_timer.stop()
+            self._keystroke_diagnostic_timer.stop()
         self.window.set_recording_state(active, paused)
-        self.window.showNormal()
-        self.window.raise_()
-        self.window.activateWindow()
+
+        if active:
+            self.window.hide()
+            self._last_hide_time = time.monotonic()
+            self._keystroke_diagnostic_timer.start()
+        else:
+            # Window may already be visible (shown by _stop_recording for processing state)
+            # Just ensure it's on top and activated
+            if not (self.window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint):
+                self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.window.show()
+            self.window.raise_()
+            self.window.activateWindow()
+            _macos_activate_app()
 
         # Update tray menu enabled states
         self._action_record.setEnabled(not active)
@@ -558,9 +607,30 @@ class ScreenRecordApplication(QObject):
         self.controller.settings = updated
         self.window.update_scope(updated.capture_mode.replace("_", " ").title())
 
+    def _check_keystroke_capture(self) -> None:
+        if not self.settings.capture_keystrokes:
+            return
+        if not self.controller._snapshot.active:
+            return
+        if platform.system() != "Darwin" or not self.controller._collector.using_macos_tap():
+            return
+        events = self.controller._collector.snapshot()
+        if not events:
+            return
+        has_non_modifier = any(not e.is_modifier for e in events)
+        if not has_non_modifier:
+            self._tray.showMessage(
+                "CaptoKey — Keystroke Issue",
+                "Keystrokes are not being captured. Enable Input Monitoring in System Settings → Privacy & Security for CaptoKey, then restart.",
+                QSystemTrayIcon.MessageIcon.Warning,
+                8000,
+            )
+            logging.warning(
+                "Keystroke capture appears degraded — only modifier keys detected. "
+                "Input Monitoring permission is likely missing."
+            )
+
     def _handle_saved_session(self, session_dir: str) -> None:
-        self.window.showNormal()
-        self.window.raise_()
         self.window.update_metrics(0, 0, 0)
         self.window.update_scope(self.settings.capture_mode.replace("_", " ").title())
         self.window.show_completion(Path(session_dir))
