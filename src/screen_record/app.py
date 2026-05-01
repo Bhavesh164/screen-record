@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import ctypes
 import platform
 import queue
@@ -10,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -354,6 +355,7 @@ class RecorderController(QObject):
 
         elapsed_ms = self._clock.elapsed_ms()
         events = self._collector.snapshot()
+        logging.info("Finalizing session: %d keystroke events captured", len(events))
         session = SessionMetadata.build(
             duration_ms=elapsed_ms,
             fps=self.settings.target_fps,
@@ -384,6 +386,11 @@ class RecorderController(QObject):
             segments=coerce_segments(payload),
             work_dir=self._session_paths.directory,
         )
+        try:
+            if self._session_paths.source_video.exists():
+                self._session_paths.source_video.unlink()
+        except OSError:
+            pass
         self.sessionSaved.emit(str(self._session_paths.directory))
 
 
@@ -444,7 +451,7 @@ class ScreenRecordApplication(QObject):
         self.controller.errorRaised.connect(self.window.show_error)
         self.controller.sessionSaved.connect(self._handle_saved_session)
         self.selector.regionSelected.connect(self._begin_recording_with_region)
-        self.selector.selectionCancelled.connect(self.window.showNormal)
+        self.selector.selectionCancelled.connect(self._cancel_recording)
 
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(250)
@@ -455,9 +462,10 @@ class ScreenRecordApplication(QObject):
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._do_start_full_display_recording)
 
-        self._overlay_keep_on_top_timer = QTimer(self)
-        self._overlay_keep_on_top_timer.setInterval(500)
-        self._overlay_keep_on_top_timer.timeout.connect(self.overlay.raise_borders)
+        self._keystroke_diagnostic_timer = QTimer(self)
+        self._keystroke_diagnostic_timer.setSingleShot(True)
+        self._keystroke_diagnostic_timer.setInterval(5000)
+        self._keystroke_diagnostic_timer.timeout.connect(self._check_keystroke_capture)
 
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
@@ -468,6 +476,7 @@ class ScreenRecordApplication(QObject):
             self.window.show_error(msg)
             return
         self.window.set_starting_state()
+        self.window.setWindowFlags(self.window.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
         self.window.hide()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
@@ -482,16 +491,21 @@ class ScreenRecordApplication(QObject):
         try:
             region = default_region_for_primary_screen()
         except Exception as exc:
-            self.window.showNormal()
+            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.window.show()
             self.window.show_error(str(exc))
             return
         self._begin_recording_with_region(region)
 
     def _stop_recording(self) -> None:
         self.controller.stop()
-        # Restore the window immediately so the user sees the completion dialog
-        self.window.showNormal()
+
+    def _cancel_recording(self) -> None:
+        self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.window.show()
         self.window.raise_()
+        self.window.activateWindow()
+        self.window.set_recording_state(False, False)
 
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
         self._selected_region = region
@@ -502,13 +516,12 @@ class ScreenRecordApplication(QObject):
             self.controller.start(region)
         except Exception as exc:
             self.overlay.hide()
-            self._overlay_keep_on_top_timer.stop()
-            self.window.showNormal()
+            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.window.show()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
             return
         self.overlay.show()
-        self._overlay_keep_on_top_timer.start()
 
     def _show_window(self) -> None:
         self.window.showNormal()
@@ -530,11 +543,18 @@ class ScreenRecordApplication(QObject):
     def _on_state_changed(self, active: bool, paused: bool) -> None:
         if not active:
             self.overlay.hide()
-            self._overlay_keep_on_top_timer.stop()
+            self._keystroke_diagnostic_timer.stop()
         self.window.set_recording_state(active, paused)
-        self.window.showNormal()
-        self.window.raise_()
-        self.window.activateWindow()
+
+        if active:
+            self.window.setWindowFlags(self.window.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+            self.window.hide()
+            self._keystroke_diagnostic_timer.start()
+        else:
+            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.window.show()
+            self.window.raise_()
+            self.window.activateWindow()
 
         # Update tray menu enabled states
         self._action_record.setEnabled(not active)
@@ -558,9 +578,28 @@ class ScreenRecordApplication(QObject):
         self.controller.settings = updated
         self.window.update_scope(updated.capture_mode.replace("_", " ").title())
 
+    def _check_keystroke_capture(self) -> None:
+        if not self.controller._snapshot.active:
+            return
+        if platform.system() != "Darwin" or not self.controller._collector.using_macos_tap():
+            return
+        events = self.controller._collector.snapshot()
+        if not events:
+            return
+        has_non_modifier = any(not e.is_modifier for e in events)
+        if not has_non_modifier:
+            self._tray.showMessage(
+                "CaptoKey — Keystroke Issue",
+                "Keystrokes are not being captured. Enable Input Monitoring in System Settings → Privacy & Security for CaptoKey, then restart.",
+                QSystemTrayIcon.MessageIcon.Warning,
+                8000,
+            )
+            logging.warning(
+                "Keystroke capture appears degraded — only modifier keys detected. "
+                "Input Monitoring permission is likely missing."
+            )
+
     def _handle_saved_session(self, session_dir: str) -> None:
-        self.window.showNormal()
-        self.window.raise_()
         self.window.update_metrics(0, 0, 0)
         self.window.update_scope(self.settings.capture_mode.replace("_", " ").title())
         self.window.show_completion(Path(session_dir))

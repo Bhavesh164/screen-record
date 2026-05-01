@@ -1,13 +1,15 @@
 # CaptoKey
 
-Desktop screen recorder built with PySide6, `mss`, `pynput`, Pillow, and `ffmpeg`.
+Desktop screen recorder built with PySide6, `mss`, `pynput`, Pillow, `ffmpeg`, and macOS `Quartz` CGEventTap.
 
 ## Features
 
 - Floating recorder HUD with timer, stats, pause/stop/settings controls
 - Full-display or selected-region capture
-- Clean source recording plus editable `timeline.json`
+- Single final video output (`final.mp4`) with keystroke overlays
+- Editable `timeline.json` capturing every key press with timestamps
 - Deterministic final-video rerender with keystroke overlays
+- macOS keyboard capture via Quartz CGEventTap (no pynput crashes)
 - Cross-platform save directory defaults and persistent settings
 
 ## Install
@@ -39,7 +41,9 @@ uv run pytest
 
 ## macOS Permissions
 
-CaptoKey requires **Screen Recording** permission on macOS to capture the screen.
+CaptoKey requires **Screen Recording** permission on macOS to capture the screen, and **Accessibility** permission to capture keystrokes.
+
+### Screen Recording
 
 **First run:**
 1. Click **Record** in CaptoKey
@@ -54,6 +58,25 @@ If you rebuild the app (which changes the binary signature), macOS will invalida
 4. Restart CaptoKey
 
 You can also reset the permission from within the app: **Settings → Reset Screen Recording Permission**.
+
+### Accessibility (Keyboard Capture)
+
+CaptoKey uses a **Quartz CGEventTap** to capture keystrokes for the on-screen overlay. This requires Accessibility permission:
+
+1. Open **System Settings → Privacy & Security → Accessibility**
+2. Toggle **CaptoKey** ON (or add it if not listed)
+3. Restart CaptoKey
+
+Without this permission, the app will still record the screen and produce a video, but keystroke overlays will not appear. Keystrokes are captured as `listen-only` events — they are observed, not intercepted or modified.
+
+## Output
+
+Each recording session creates a folder (e.g. `screen-record-20260502-143055/`) containing:
+
+- **`final.mp4`** — the final video with keystroke overlays burned in
+- **`timeline.json`** — editable JSON with every key press, timestamps, and overlay style settings
+
+To rerender with different overlay styles, edit `timeline.json` and click **Render Again** in the completion dialog.
 
 ## Build App Bundle
 

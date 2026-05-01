@@ -111,11 +111,12 @@ def primary_screen_region() -> CaptureRegion:
 class RecordingOverlay:
     BORDER_WIDTH = 4
     BORDER_COLOR = "#FF5B4A"
+    _OVERLAY_TAG = "_cko_overlay_"
 
     def __init__(self) -> None:
         self._borders: list[QWidget] = []
         self._visible = False
-        for _ in range(4):
+        for i in range(4):
             w = QWidget()
             w.setWindowFlags(
                 Qt.WindowType.FramelessWindowHint
@@ -141,9 +142,9 @@ class RecordingOverlay:
 
     def show(self) -> None:
         self._visible = True
-        for b in self._borders:
+        for i, b in enumerate(self._borders):
+            b.setWindowTitle(f"{self._OVERLAY_TAG}{i}")
             b.show()
-            b.raise_()
         self._set_mac_window_level()
 
     def hide(self) -> None:
@@ -151,10 +152,18 @@ class RecordingOverlay:
         for b in self._borders:
             b.hide()
 
-    def raise_borders(self) -> None:
-        if self._visible:
-            for b in self._borders:
-                b.raise_()
-
     def _set_mac_window_level(self) -> None:
-        pass
+        if sys.platform != "darwin":
+            return
+        try:
+            import AppKit
+            from Quartz import CGWindowLevelForKey, kCGOverlayWindowLevelKey
+
+            level = int(CGWindowLevelForKey(kCGOverlayWindowLevelKey))
+            ns_app = AppKit.NSApplication.sharedApplication()
+            for win in ns_app.windows():
+                if win.isVisible() and win.title().startswith(self._OVERLAY_TAG):
+                    win.setLevel_(level)
+                    win.setTitle_("")
+        except Exception:
+            pass
