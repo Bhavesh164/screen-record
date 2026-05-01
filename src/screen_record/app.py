@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -416,6 +416,8 @@ class ScreenRecordApplication(QObject):
         self.overlay = RecordingOverlay()
         self._selected_region: CaptureRegion | None = None
 
+        self._app.installEventFilter(self)
+
         # System tray
         self._tray = QSystemTrayIcon(self)
         icon_file = asset_path("captokey.png")
@@ -480,6 +482,12 @@ class ScreenRecordApplication(QObject):
         self.window.show()
         self.window.set_recording_state(active=False, paused=False)
 
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.ApplicationActivate:
+            if self.controller._snapshot.active:
+                self._show_window()
+        return super().eventFilter(obj, event)
+
     def _start_recording(self) -> None:
         allowed, msg = _macos_ensure_screen_capture()
         if not allowed:
@@ -536,7 +544,8 @@ class ScreenRecordApplication(QObject):
         self.overlay.show()
 
     def _show_window(self) -> None:
-        self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        if not (self.window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint):
+            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
@@ -566,7 +575,8 @@ class ScreenRecordApplication(QObject):
         else:
             # Window may already be visible (shown by _stop_recording for processing state)
             # Just ensure it's on top and activated
-            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            if not (self.window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint):
+                self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
             self.window.show()
             self.window.raise_()
             self.window.activateWindow()
