@@ -460,9 +460,9 @@ class ScreenRecordApplication(QObject):
         self.window.settingsRequested.connect(self._open_settings)
         self.window.renderAgainRequested.connect(self.controller.rerender)
         self.controller.statsUpdated.connect(self.window.update_metrics)
-        self.controller.stateChanged.connect(self._on_state_changed)
-        self.controller.errorRaised.connect(self.window.show_error)
-        self.controller.sessionSaved.connect(self._handle_saved_session)
+        self.controller.stateChanged.connect(self._on_state_changed, Qt.ConnectionType.QueuedConnection)
+        self.controller.errorRaised.connect(self.window.show_error, Qt.ConnectionType.QueuedConnection)
+        self.controller.sessionSaved.connect(self._handle_saved_session, Qt.ConnectionType.QueuedConnection)
         self.selector.regionSelected.connect(self._begin_recording_with_region)
         self.selector.selectionCancelled.connect(self._cancel_recording)
 
@@ -485,9 +485,8 @@ class ScreenRecordApplication(QObject):
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.ApplicationActivate:
-            if self.controller._snapshot.active:
-                if time.monotonic() - getattr(self, "_last_hide_time", 0) > 1.0:
-                    self._show_window()
+            if time.monotonic() - getattr(self, "_last_hide_time", 0) > 1.0:
+                self._show_window()
         return super().eventFilter(obj, event)
 
     def _start_recording(self) -> None:
