@@ -485,7 +485,8 @@ class ScreenRecordApplication(QObject):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.ApplicationActivate:
             if self.controller._snapshot.active:
-                self._show_window()
+                if time.monotonic() - getattr(self, "_last_hide_time", 0) > 1.0:
+                    self._show_window()
         return super().eventFilter(obj, event)
 
     def _start_recording(self) -> None:
@@ -495,6 +496,7 @@ class ScreenRecordApplication(QObject):
             return
         self.window.set_starting_state()
         self.window.hide()
+        self._last_hide_time = time.monotonic()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
             screen = self._app.primaryScreen()
@@ -571,6 +573,7 @@ class ScreenRecordApplication(QObject):
 
         if active:
             self.window.hide()
+            self._last_hide_time = time.monotonic()
             self._keystroke_diagnostic_timer.start()
         else:
             # Window may already be visible (shown by _stop_recording for processing state)

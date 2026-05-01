@@ -204,6 +204,10 @@ class RecorderWindow(QMainWindow):
         self.status_chip.setObjectName("statusChip")
         self.timer_label = QLabel("00:00:00")
         self.timer_label.setObjectName("timer")
+        min_btn = QPushButton("—")
+        min_btn.setObjectName("minimizeAppBtn")
+        min_btn.setFixedSize(26, 26)
+        min_btn.clicked.connect(self.hide)
         close_btn = QPushButton("✕")
         close_btn.setObjectName("closeAppBtn")
         close_btn.setFixedSize(26, 26)
@@ -211,6 +215,7 @@ class RecorderWindow(QMainWindow):
         header.addWidget(self.status_chip)
         header.addStretch(1)
         header.addWidget(self.timer_label)
+        header.addWidget(min_btn)
         header.addWidget(close_btn)
         layout.addLayout(header)
 
@@ -490,14 +495,14 @@ QLabel#timer {
     font-weight: 600;
     margin-right: 8px;
 }
-QPushButton#closeAppBtn {
+QPushButton#closeAppBtn, QPushButton#minimizeAppBtn {
     background: transparent;
     border: none;
     color: #9AA4B2;
     font-size: 14px;
     padding: 0;
 }
-QPushButton#closeAppBtn:hover {
+QPushButton#closeAppBtn:hover, QPushButton#minimizeAppBtn:hover {
     color: #F8FAFC;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
