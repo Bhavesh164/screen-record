@@ -3,7 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+import math
+import platform
+
+from PySide6.QtCore import QSize, Qt, QTimer, Signal, QPropertyAnimation, QRect
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QBitmap, QBrush, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
@@ -50,11 +53,18 @@ class RecordButton(QPushButton):
         self.setFixedSize(self._RECORD_SIZE, self._RECORD_SIZE)
         self._recording = False
         self._pulse_phase = False
+        self._show_spinner = False
+        self._spinner_angle = 0
         self._apply_circle_mask()
 
     def set_recording(self, active: bool) -> None:
         self._recording = active
         self._pulse_phase = False
+        self.update()
+
+    def set_spinner(self, show: bool, angle: int = 0) -> None:
+        self._show_spinner = show
+        self._spinner_angle = angle
         self.update()
 
     def toggle_pulse(self) -> None:
@@ -77,6 +87,31 @@ class RecordButton(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         center = self._RECORD_SIZE // 2
         radius = center
+
+        if self._show_spinner:
+            painter.setPen(QPen(QColor("#1E232D"), 3))
+            painter.setBrush(QColor("#0F172A"))
+            painter.drawEllipse(4, 4, self._RECORD_SIZE - 8, self._RECORD_SIZE - 8)
+
+            arc_pen = QPen(QColor("#69B8E1"), 4)
+            arc_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(arc_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            rect = QRect(10, 10, self._RECORD_SIZE - 20, self._RECORD_SIZE - 20)
+            start_angle = self._spinner_angle * 16
+            span_angle = 120 * 16
+            painter.drawArc(rect, start_angle, span_angle)
+
+            text_pen = QPen(QColor("#69B8E1"))
+            painter.setPen(text_pen)
+            font = painter.font()
+            font.setPixelSize(10)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "...")
+
+            painter.end()
+            return
 
         if not self.isEnabled():
             painter.setPen(QPen(QColor("#1E232D"), 2))
@@ -112,6 +147,16 @@ class RecordButton(QPushButton):
         painter.end()
 
 
+def _macos_activate_app() -> None:
+    if platform.system() != "Darwin":
+        return
+    try:
+        import AppKit
+        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
+
 def _make_tool_icon(text: str, size: int = 28) -> QIcon:
     pixmap = QPixmap(size, size)
     pixmap.fill(QColor("transparent"))
@@ -137,11 +182,14 @@ class RecorderWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CaptoKey")
         self.setFixedSize(340, 440)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._latest_session_dir: Path | None = None
         self._paused = False
         self._recording_active = False
+        self._processing = False
+        self._spinner_angle = 0
+        self._spinner_timer: QTimer | None = None
 
         root = QWidget()
         root.setObjectName("rootPanel")
@@ -278,6 +326,7 @@ class RecorderWindow(QMainWindow):
             self.record_button.set_recording(True)
             self._pulse_timer.stop()
         else:
+            self._stop_processing()
             self.status_chip.setText("Ready")
             self.status_chip.setStyleSheet(
                 "background: #1A3B29; color: #69E18A; padding: 4px 10px; "
@@ -303,6 +352,38 @@ class RecorderWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.pause_button.setEnabled(False)
 
+    def set_processing_state(self) -> None:
+        self._processing = True
+        self.status_chip.setText("Processing")
+        self.status_chip.setStyleSheet(
+            "background: #1A293B; color: #69B8E1; padding: 4px 10px; "
+            "border-radius: 10px; font-size: 11px; font-weight: 600;"
+        )
+        self.recording_label.setText("Finalizing recording...")
+        self.record_button.set_recording(False)
+        self.record_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self._spinner_angle = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(80)
+        self._spinner_timer.timeout.connect(self._advance_spinner)
+        self._spinner_timer.start()
+
+    def _advance_spinner(self) -> None:
+        if not self._processing:
+            return
+        self._spinner_angle = (self._spinner_angle + 30) % 360
+        self.record_button.set_spinner(True, self._spinner_angle)
+
+    def _stop_processing(self) -> None:
+        self._processing = False
+        self._spinner_angle = 0
+        self.record_button.set_spinner(False)
+        if hasattr(self, "_spinner_timer") and self._spinner_timer is not None:
+            self._spinner_timer.stop()
+            self._spinner_timer = None
+
     def _toggle_pulse(self) -> None:
         self.record_button.toggle_pulse()
 
@@ -320,11 +401,16 @@ class RecorderWindow(QMainWindow):
 
     def show_completion(self, session_dir: Path) -> None:
         self._latest_session_dir = session_dir
-        self.showNormal()
-        self.raise_()
-        # Temporarily drop stay-on-top so the modal dialog can appear above us
+        self._stop_processing()
+        # Drop stay-on-top and bring window to front
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
         self.show()
+        self.raise_()
+        self.activateWindow()
+        _macos_activate_app()
+        # Force Qt to process the window state changes before showing the dialog
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
         message = QMessageBox(self)
         message.setWindowTitle("Recording saved")
         message.setText(f"Saved recording session to:\n{session_dir}")
@@ -345,10 +431,12 @@ class RecorderWindow(QMainWindow):
             self.renderAgainRequested.emit(str(session_dir))
 
     def show_error(self, message: str) -> None:
-        self.showNormal()
-        self.raise_()
+        self._stop_processing()
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
         self.show()
+        self.raise_()
+        self.activateWindow()
+        _macos_activate_app()
         QMessageBox.critical(self, "CaptoKey", message)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.show()

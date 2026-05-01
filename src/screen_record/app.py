@@ -92,6 +92,16 @@ from screen_record.ui.main_window import RecorderWindow
 from screen_record.ui.region_selector import RegionSelector, RecordingOverlay
 
 
+def _macos_activate_app() -> None:
+    if platform.system() != "Darwin":
+        return
+    try:
+        import AppKit
+        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
+
 class SessionClock:
     def __init__(self) -> None:
         self._started = time.monotonic()
@@ -496,12 +506,18 @@ class ScreenRecordApplication(QObject):
         self._begin_recording_with_region(region)
 
     def _stop_recording(self) -> None:
+        self.window.set_processing_state()
+        self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
+        _macos_activate_app()
         self.controller.stop()
 
     def _cancel_recording(self) -> None:
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+        _macos_activate_app()
         self.window.set_recording_state(False, False)
 
     def _begin_recording_with_region(self, region: CaptureRegion) -> None:
@@ -524,6 +540,7 @@ class ScreenRecordApplication(QObject):
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
+        _macos_activate_app()
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -547,10 +564,13 @@ class ScreenRecordApplication(QObject):
             self.window.hide()
             self._keystroke_diagnostic_timer.start()
         else:
+            # Window may already be visible (shown by _stop_recording for processing state)
+            # Just ensure it's on top and activated
             self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
             self.window.show()
             self.window.raise_()
             self.window.activateWindow()
+            _macos_activate_app()
 
         # Update tray menu enabled states
         self._action_record.setEnabled(not active)
