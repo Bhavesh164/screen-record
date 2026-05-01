@@ -476,7 +476,6 @@ class ScreenRecordApplication(QObject):
             self.window.show_error(msg)
             return
         self.window.set_starting_state()
-        self.window.setWindowFlags(self.window.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
         self.window.hide()
         self._app.processEvents()
         if self.settings.capture_mode == "region":
@@ -491,7 +490,6 @@ class ScreenRecordApplication(QObject):
         try:
             region = default_region_for_primary_screen()
         except Exception as exc:
-            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
             self.window.show()
             self.window.show_error(str(exc))
             return
@@ -501,7 +499,6 @@ class ScreenRecordApplication(QObject):
         self.controller.stop()
 
     def _cancel_recording(self) -> None:
-        self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
@@ -516,7 +513,6 @@ class ScreenRecordApplication(QObject):
             self.controller.start(region)
         except Exception as exc:
             self.overlay.hide()
-            self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
             self.window.show()
             self.window.set_recording_state(False, False)
             self.window.show_error(str(exc))
@@ -524,7 +520,8 @@ class ScreenRecordApplication(QObject):
         self.overlay.show()
 
     def _show_window(self) -> None:
-        self.window.showNormal()
+        self.window.setWindowFlags(self.window.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.window.show()
         self.window.raise_()
         self.window.activateWindow()
 
@@ -547,7 +544,6 @@ class ScreenRecordApplication(QObject):
         self.window.set_recording_state(active, paused)
 
         if active:
-            self.window.setWindowFlags(self.window.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
             self.window.hide()
             self._keystroke_diagnostic_timer.start()
         else:
