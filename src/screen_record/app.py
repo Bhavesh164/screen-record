@@ -167,7 +167,7 @@ class RecorderController(QObject):
 
             ffmpeg_path = resolve_ffmpeg_path(self.settings.ffmpeg_path)
             self.settings.resolved_save_dir().mkdir(parents=True, exist_ok=True)
-            self._session_paths = create_session_paths(self.settings.resolved_save_dir())
+            self._session_paths = create_session_paths(self.settings.resolved_save_dir(), self.settings.capture_keystrokes)
             self._active_region = region
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=3)
@@ -259,10 +259,19 @@ class RecorderController(QObject):
         session_path = Path(session_dir)
         payload = load_timeline(session_path / "timeline.json")
         resolution = payload["session"]["resolution"]
+        
+        source_vid = session_path / "without_keystrokes.mp4"
+        if not source_vid.exists():
+            source_vid = session_path / "recording.mp4"
+            if not source_vid.exists():
+                source_vid = session_path / "source.mp4"
+                
+        final_vid = session_path / "with_keystrokes.mp4"
+        
         render_final_video(
             ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
-            source_video=session_path / "source.mp4",
-            final_video=session_path / "final.mp4",
+            source_video=source_vid,
+            final_video=final_vid,
             width=int(resolution["width"]),
             height=int(resolution["height"]),
             style=payload.get("style", {}),
@@ -384,24 +393,23 @@ class RecorderController(QObject):
         )
         payload["stats"]["dropped_frames"] = self._dropped_frames
         write_timeline(self._session_paths.timeline_file, payload)
-        # Ensure even dimensions for libx264
-        render_w = self._active_region.width if self._active_region.width % 2 == 0 else self._active_region.width + 1
-        render_h = self._active_region.height if self._active_region.height % 2 == 0 else self._active_region.height + 1
-        render_final_video(
-            ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
-            source_video=self._session_paths.source_video,
-            final_video=self._session_paths.final_video,
-            width=render_w,
-            height=render_h,
-            style=payload.get("style", {}),
-            segments=coerce_segments(payload),
-            work_dir=self._session_paths.directory,
-        )
-        try:
-            if self._session_paths.source_video.exists():
-                self._session_paths.source_video.unlink()
-        except OSError:
-            pass
+        
+        if self.settings.capture_keystrokes:
+            # Ensure even dimensions for libx264
+            render_w = self._active_region.width if self._active_region.width % 2 == 0 else self._active_region.width + 1
+            render_h = self._active_region.height if self._active_region.height % 2 == 0 else self._active_region.height + 1
+            render_final_video(
+                ffmpeg_path=resolve_ffmpeg_path(self.settings.ffmpeg_path),
+                source_video=self._session_paths.source_video,
+                final_video=self._session_paths.final_video,
+                width=render_w,
+                height=render_h,
+                style=payload.get("style", {}),
+                segments=coerce_segments(payload),
+                work_dir=self._session_paths.directory,
+            )
+            
+        # We keep source video so the user can use "Render Again" after editing timeline.json
         self.sessionSaved.emit(str(self._session_paths.directory))
 
 

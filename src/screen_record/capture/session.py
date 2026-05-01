@@ -8,14 +8,21 @@ from pathlib import Path
 from screen_record.models import CaptureRegion, SessionPaths
 
 
-def create_session_paths(save_dir: Path) -> SessionPaths:
+def create_session_paths(save_dir: Path, capture_keystrokes: bool) -> SessionPaths:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     directory = save_dir / f"screen-record-{stamp}"
     directory.mkdir(parents=True, exist_ok=True)
+    if capture_keystrokes:
+        return SessionPaths(
+            directory=directory,
+            source_video=directory / "without_keystrokes.mp4",
+            final_video=directory / "with_keystrokes.mp4",
+            timeline_file=directory / "timeline.json",
+        )
     return SessionPaths(
         directory=directory,
-        source_video=directory / "source.mp4",
-        final_video=directory / "final.mp4",
+        source_video=directory / "recording.mp4",
+        final_video=directory / "recording.mp4",
         timeline_file=directory / "timeline.json",
     )
 
