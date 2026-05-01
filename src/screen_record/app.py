@@ -172,7 +172,8 @@ class RecorderController(QObject):
             self._stop_event.clear()
             self._frame_queue = queue.Queue(maxsize=3)
             self._collector = KeyEventCollector()
-            self._collector.start()
+            if self.settings.capture_keystrokes:
+                self._collector.start()
             self._clock = SessionClock()
             self._started_at = datetime.now()
             self._dropped_frames = 0
@@ -608,6 +609,8 @@ class ScreenRecordApplication(QObject):
         self.window.update_scope(updated.capture_mode.replace("_", " ").title())
 
     def _check_keystroke_capture(self) -> None:
+        if not self.settings.capture_keystrokes:
+            return
         if not self.controller._snapshot.active:
             return
         if platform.system() != "Darwin" or not self.controller._collector.using_macos_tap():

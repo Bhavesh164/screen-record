@@ -23,6 +23,7 @@ class AppSettings:
     target_fps: int = 30
     output_container: str = "mp4"
     ffmpeg_path: str = ""
+    capture_keystrokes: bool = True
 
     def resolved_save_dir(self) -> Path:
         return Path(self.save_dir).expanduser()
